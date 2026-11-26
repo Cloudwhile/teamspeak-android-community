@@ -1,0 +1,205 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag to publish (e.g. v1.0.0)"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark release as pre-release"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  OPUS_STATIC: "1"
+  LIBOPUS_STATIC: "1"
+  OPUS_NO_PKG: "1"
+  LIBOPUS_NO_PKG: "1"
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-release:
+    name: Build Signed Multi-ABI APKs & Publish Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve and validate semantic version
+        id: meta
+        run: |
+          RAW_TAG="${{ inputs.tag_name || github.ref_name }}"
+          if [[ ! "$RAW_TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-([0-9A-Za-z.-]+))?$ ]]; then
+            echo "Invalid semantic version tag: '$RAW_TAG' (expected vMAJOR.MINOR.PATCH)"
+            exit 1
+          fi
+          MAJOR="${BASH_REMATCH[1]}"
+          MINOR="${BASH_REMATCH[2]}"
+          PATCH="${BASH_REMATCH[3]}"
+          SUFFIX="${BASH_REMATCH[4]}"
+          VERSION_NAME="${MAJOR}.${MINOR}.${PATCH}${SUFFIX}"
+          VERSION_CODE=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))
+          if [ "$VERSION_CODE" -le 0 ]; then
+            VERSION_CODE=1
+          fi
+
+          IS_PRERELEASE="${{ inputs.prerelease }}"
+          if [[ -n "$SUFFIX" ]]; then
+            IS_PRERELEASE="true"
+          fi
+
+          echo "tag=$RAW_TAG" >> "$GITHUB_OUTPUT"
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build pkg-config build-essential
+
+      - name: Set up Android SDK, NDK & Build-Tools
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK, CMake & apksigner
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+
+      - name: Install Rust toolchain & Android targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Install cargo-ndk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust-core
+          key: release-ndk-28
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run Rust core test suite
+        run: cargo test --manifest-path rust-core/Cargo.toml --locked
+
+      - name: Prepare release signing keystore
+        id: signing
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
+            KS_FILE="$RUNNER_TEMP/tscc-release-signing.jks"
+            echo "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$KS_FILE"
+            echo "keystore_file=$KS_FILE" >> "$GITHUB_OUTPUT"
+            echo "Using repository release signing keystore."
+          else
+            echo "keystore_file=" >> "$GITHUB_OUTPUT"
+            echo "::warning::SIGNING_KEYSTORE_BASE64 is not set; building installable APKs with fallback debug signature."
+          fi
+
+      - name: Build & verify multi-architecture Release APKs
+        env:
+          SIGNING_KEYSTORE_FILE: ${{ steps.signing.outputs.keystore_file }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew \
+            :app:testDebugUnitTest \
+            :app:lintVitalRelease \
+            :app:assembleRelease \
+            -PversionName="${{ steps.meta.outputs.version_name }}" \
+            -PversionCode="${{ steps.meta.outputs.version_code }}" \
+            --no-daemon \
+            --stacktrace
+
+      - name: Stage, verify signatures & checksum all architecture APKs
+        run: |
+          mkdir -p dist
+          VERSION="${{ steps.meta.outputs.version_name }}"
+          APKSIGNER="$ANDROID_HOME/build-tools/34.0.0/apksigner"
+
+          for abi in arm64-v8a armeabi-v7a x86_64 universal; do
+            SRC_APK=$(find app/build/outputs/apk/release -maxdepth 1 -name "*${abi}*-release.apk" | head -n 1)
+            if [ -z "$SRC_APK" ] || [ ! -f "$SRC_APK" ]; then
+              echo "Expected APK for ABI '$abi' not found!"
+              exit 1
+            fi
+            DEST_APK="dist/TSCC-v${VERSION}-${abi}.apk"
+            cp "$SRC_APK" "$DEST_APK"
+            "$APKSIGNER" verify --verbose "$DEST_APK"
+          done
+
+          (
+            cd dist
+            sha256sum *.apk > SHA256SUMS.txt
+            cat SHA256SUMS.txt
+          )
+
+      - name: Clean up temporary keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/tscc-release-signing.jks"
+
+      - name: Generate release body header
+        run: |
+          VERSION="${{ steps.meta.outputs.version_name }}"
+          {
+            echo "> **非官方声明 / Unofficial Notice**：TSCC 为社区独立维护的非官方开源客户端，与 TeamSpeak Systems GmbH 无任何隶属、授权或背书关系。"
+            echo ""
+            echo "### 📦 多架构安装包选择指南 / APK Downloads"
+            echo ""
+            echo "| 文件名 / Package | 架构 / Architecture | 适用设备 / Target Devices |"
+            echo "| :--- | :--- | :--- |"
+            echo "| \`TSCC-v${VERSION}-arm64-v8a.apk\` | \`arm64-v8a\` | **推荐**：主流 64 位 Android 手机与平板 |"
+            echo "| \`TSCC-v${VERSION}-armeabi-v7a.apk\` | \`armeabi-v7a\` | 较早期 32 位 ARM Android 设备 |"
+            echo "| \`TSCC-v${VERSION}-x86_64.apk\` | \`x86_64\` | Android 模拟器、Waydroid、Chromebook |"
+            echo "| \`TSCC-v${VERSION}-universal.apk\` | \`universal\` | 全架构合一通用安装包 |"
+            echo ""
+            echo "安装包 SHA-256 校验值见附件 \`SHA256SUMS.txt\`。"
+          } > dist/RELEASE_NOTES_HEADER.md
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: "TSCC v${{ steps.meta.outputs.version_name }}"
+          body_path: dist/RELEASE_NOTES_HEADER.md
+          generate_release_notes: true
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          fail_on_unmatched_files: true
+          files: |
+            dist/TSCC-v${{ steps.meta.outputs.version_name }}-arm64-v8a.apk
+            dist/TSCC-v${{ steps.meta.outputs.version_name }}-armeabi-v7a.apk
+            dist/TSCC-v${{ steps.meta.outputs.version_name }}-x86_64.apk
+            dist/TSCC-v${{ steps.meta.outputs.version_name }}-universal.apk
+            dist/SHA256SUMS.txt

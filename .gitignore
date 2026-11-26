@@ -1,0 +1,23 @@
+# Gradle & Kotlin caches
+.gradle/
+.kotlin/
+build/
+app/build/
+
+# Native JNI outputs (built reproducibly via cargo-ndk)
+app/src/main/jniLibs/
+rust-core/target/
+
+# Local environment & signing secrets
+local.properties
+keystore.properties
+keystore/
+*.keystore
+*.jks
+
+# IDE & OS files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

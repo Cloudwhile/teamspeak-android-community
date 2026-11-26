@@ -1,0 +1,44 @@
+name: Bug Report / 问题反馈
+description: 报告 TSCC 客户端的崩溃、连接异常或音频问题
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈问题！注意 TSCC 是非官方社区开源项目，请勿在问题中包含真实服务器私密密码或个人身份 `.ini` 私钥。
+  - type: input
+    id: version
+    attributes:
+      label: TSCC 版本与安装包架构
+      placeholder: "例如：v1.0.0 (arm64-v8a)"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: 设备型号与 Android 系统版本
+      placeholder: "例如：Pixel 8 / Android 14"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 连接服务器（TS3 3.13 / TS6）...
+        2. 点击...
+        3. 出现现象...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为与实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志（Logcat 过滤 tscc_core / TSCC，注意脱敏）
+      render: shell

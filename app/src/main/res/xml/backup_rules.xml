@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Allowlist mode: only UI preferences in files/datastore/ are backed up; databases & keys are excluded -->
+    <include domain="file" path="datastore/" />
+</full-backup-content>

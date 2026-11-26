@@ -1,0 +1,106 @@
+package com.cloudwhile.tscc.data
+
+import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import com.cloudwhile.tscc.data.model.AppLanguage
+import com.cloudwhile.tscc.data.model.VoiceMode
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+
+private val Context.dataStore by preferencesDataStore(name = "tscc_settings")
+
+data class AppSettings(
+    val defaultNickname: String = "TSCC_Player",
+    val voiceMode: VoiceMode = VoiceMode.VAD,
+    val vadThresholdDb: Float = -42f,
+    val antiPlosiveEnabled: Boolean = true,
+    val soundCuesEnabled: Boolean = true,
+    val hardwareAecEnabled: Boolean = true,
+    val hardwareNsEnabled: Boolean = true,
+    val hardwareAgcEnabled: Boolean = true,
+    val overlayEnabled: Boolean = false,
+    val darkTheme: Boolean = true,
+    val appLanguage: AppLanguage = AppLanguage.SYSTEM
+)
+
+class SettingsRepository(private val context: Context) {
+
+    private object Keys {
+        val DEFAULT_NICKNAME = stringPreferencesKey("default_nickname")
+        val VOICE_MODE = intPreferencesKey("voice_mode")
+        val VAD_THRESHOLD_DB = floatPreferencesKey("vad_threshold_db")
+        val ANTI_PLOSIVE = booleanPreferencesKey("anti_plosive_dsp")
+        val SOUND_CUES = booleanPreferencesKey("sound_cues_enabled")
+        val HW_AEC = booleanPreferencesKey("hw_aec")
+        val HW_NS = booleanPreferencesKey("hw_ns")
+        val HW_AGC = booleanPreferencesKey("hw_agc")
+        val OVERLAY_ENABLED = booleanPreferencesKey("overlay_enabled")
+        val DARK_THEME = booleanPreferencesKey("dark_theme")
+        val APP_LANGUAGE = stringPreferencesKey("app_language")
+    }
+
+    val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
+        AppSettings(
+            defaultNickname = prefs[Keys.DEFAULT_NICKNAME] ?: "TSCC_Player",
+            voiceMode = VoiceMode.fromCode(prefs[Keys.VOICE_MODE] ?: VoiceMode.VAD.code),
+            vadThresholdDb = prefs[Keys.VAD_THRESHOLD_DB] ?: -42f,
+            antiPlosiveEnabled = prefs[Keys.ANTI_PLOSIVE] ?: true,
+            soundCuesEnabled = prefs[Keys.SOUND_CUES] ?: true,
+            hardwareAecEnabled = prefs[Keys.HW_AEC] ?: true,
+            hardwareNsEnabled = prefs[Keys.HW_NS] ?: true,
+            hardwareAgcEnabled = prefs[Keys.HW_AGC] ?: true,
+            overlayEnabled = prefs[Keys.OVERLAY_ENABLED] ?: false,
+            darkTheme = prefs[Keys.DARK_THEME] ?: true,
+            appLanguage = AppLanguage.fromCode(prefs[Keys.APP_LANGUAGE])
+        )
+    }
+
+    suspend fun setDefaultNickname(name: String) {
+        context.dataStore.edit { it[Keys.DEFAULT_NICKNAME] = name.trim().ifBlank { "TSCC_Player" } }
+    }
+
+    suspend fun setVoiceMode(mode: VoiceMode) {
+        context.dataStore.edit { it[Keys.VOICE_MODE] = mode.code }
+    }
+
+    suspend fun setVadThresholdDb(db: Float) {
+        context.dataStore.edit { it[Keys.VAD_THRESHOLD_DB] = db.coerceIn(-75f, -5f) }
+    }
+
+    suspend fun setAntiPlosiveEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.ANTI_PLOSIVE] = enabled }
+    }
+
+    suspend fun setSoundCuesEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.SOUND_CUES] = enabled }
+    }
+
+    suspend fun setHardwareAudioProcessing(aec: Boolean, ns: Boolean, agc: Boolean) {
+        context.dataStore.edit {
+            it[Keys.HW_AEC] = aec
+            it[Keys.HW_NS] = ns
+            it[Keys.HW_AGC] = agc
+        }
+    }
+
+    suspend fun setOverlayEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.OVERLAY_ENABLED] = enabled }
+    }
+
+    suspend fun setDarkTheme(dark: Boolean) {
+        context.dataStore.edit { it[Keys.DARK_THEME] = dark }
+    }
+
+    suspend fun setAppLanguage(language: AppLanguage) {
+        context.dataStore.edit { it[Keys.APP_LANGUAGE] = language.code }
+    }
+
+    suspend fun clearAllSettings() {
+        context.dataStore.edit { it.clear() }
+    }
+}
