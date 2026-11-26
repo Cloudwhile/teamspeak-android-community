@@ -45,6 +45,13 @@ val configuredTargetAbis: List<String> = ((findProperty("targetAbis") as? String
     ?.takeIf { it.isNotEmpty() })
     ?: listOf("arm64-v8a", "armeabi-v7a", "x86_64")
 
+val customReleaseKsFile: File? = signingProp("storeFile", "SIGNING_KEYSTORE_FILE", "TSCC_KEYSTORE_FILE")
+    ?.let { path ->
+        val direct = File(path)
+        if (direct.isAbsolute) direct else rootProject.file(path)
+    }
+    ?.takeIf { it.exists() }
+
 android {
     namespace = "com.cloudwhile.tscc"
     compileSdk = 34
@@ -71,22 +78,15 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            val ksPath = signingProp("storeFile", "SIGNING_KEYSTORE_FILE", "TSCC_KEYSTORE_FILE")
-            val ksFile = ksPath?.let { path ->
-                val direct = File(path)
-                if (direct.isAbsolute) direct else rootProject.file(path)
-            }
-            if (ksFile != null && ksFile.exists()) {
-                storeFile = ksFile
+        if (customReleaseKsFile != null) {
+            create("release") {
+                storeFile = customReleaseKsFile
                 storePassword = signingProp("storePassword", "SIGNING_STORE_PASSWORD", "TSCC_KEYSTORE_PASSWORD")
                 keyAlias = signingProp("keyAlias", "SIGNING_KEY_ALIAS", "TSCC_KEY_ALIAS")
                 keyPassword = signingProp("keyPassword", "SIGNING_KEY_PASSWORD", "TSCC_KEY_PASSWORD")
                 enableV1Signing = true
                 enableV2Signing = true
                 enableV3Signing = true
-            } else {
-                initWith(getByName("debug"))
             }
         }
     }
@@ -96,7 +96,11 @@ android {
             isDefault = true
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (customReleaseKsFile != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

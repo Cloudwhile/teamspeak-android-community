@@ -38,7 +38,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -135,7 +135,7 @@ jobs:
           key: release-ndk-28
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Run Rust core test suite
         run: cargo test --manifest-path rust-core/Cargo.toml --locked
@@ -144,23 +144,44 @@ jobs:
         id: signing
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
+          KS_FILE="$RUNNER_TEMP/tscc-release-signing.jks"
+          rm -f "$KS_FILE"
           if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
-            KS_FILE="$RUNNER_TEMP/tscc-release-signing.jks"
             echo "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$KS_FILE"
             echo "keystore_file=$KS_FILE" >> "$GITHUB_OUTPUT"
+            echo "store_password=$SIGNING_STORE_PASSWORD" >> "$GITHUB_OUTPUT"
+            echo "key_alias=$SIGNING_KEY_ALIAS" >> "$GITHUB_OUTPUT"
+            echo "key_password=$SIGNING_KEY_PASSWORD" >> "$GITHUB_OUTPUT"
             echo "Using repository release signing keystore."
           else
-            echo "keystore_file=" >> "$GITHUB_OUTPUT"
-            echo "::warning::SIGNING_KEYSTORE_BASE64 is not set; building installable APKs with fallback debug signature."
+            echo "::warning::SIGNING_KEYSTORE_BASE64 is not set; generating fallback PKCS12 keystore so all APKs are signed and installable."
+            keytool -genkeypair \
+              -v \
+              -storetype PKCS12 \
+              -keystore "$KS_FILE" \
+              -alias "tscc" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass "android" \
+              -keypass "android" \
+              -dname "CN=TSCC Community, OU=Android, O=Cloudwhile, C=US"
+            echo "keystore_file=$KS_FILE" >> "$GITHUB_OUTPUT"
+            echo "store_password=android" >> "$GITHUB_OUTPUT"
+            echo "key_alias=tscc" >> "$GITHUB_OUTPUT"
+            echo "key_password=android" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build & verify multi-architecture Release APKs
         env:
           SIGNING_KEYSTORE_FILE: ${{ steps.signing.outputs.keystore_file }}
-          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          SIGNING_STORE_PASSWORD: ${{ steps.signing.outputs.store_password }}
+          SIGNING_KEY_ALIAS: ${{ steps.signing.outputs.key_alias }}
+          SIGNING_KEY_PASSWORD: ${{ steps.signing.outputs.key_password }}
         run: |
           chmod +x ./gradlew
           ./gradlew \
@@ -218,7 +239,7 @@ jobs:
           } > dist/RELEASE_NOTES_HEADER.md
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: "TSCC v${{ steps.meta.outputs.version_name }}"
