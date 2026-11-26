@@ -113,7 +113,7 @@ jobs:
           done
 
       - name: Upload multi-ABI Release APKs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: TSCC-ci-release-apks
           path: app/build/outputs/apk/release/*.apk
