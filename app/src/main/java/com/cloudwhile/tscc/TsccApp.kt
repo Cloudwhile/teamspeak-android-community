@@ -8,6 +8,7 @@ import android.os.Bundle
 import com.cloudwhile.tscc.data.SettingsRepository
 import com.cloudwhile.tscc.data.TsccRepository
 import com.cloudwhile.tscc.data.db.AppDatabase
+import com.cloudwhile.tscc.data.update.AppUpdateManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +24,9 @@ class TsccApp : Application() {
     lateinit var tsccRepository: TsccRepository
         private set
 
+    lateinit var appUpdateManager: AppUpdateManager
+        private set
+
     private var startedActivityCount = 0
     private val _isAppInForeground = MutableStateFlow(false)
     val isAppInForeground: StateFlow<Boolean> = _isAppInForeground.asStateFlow()
@@ -35,6 +39,7 @@ class TsccApp : Application() {
         database = AppDatabase.getInstance(this)
         settingsRepository = SettingsRepository(this)
         tsccRepository = TsccRepository(this, database, settingsRepository)
+        appUpdateManager = AppUpdateManager(this)
     }
 
     private fun registerForegroundTracker() {

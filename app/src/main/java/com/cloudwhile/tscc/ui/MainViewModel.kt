@@ -23,6 +23,7 @@ import com.cloudwhile.tscc.data.model.ToastTone
 import com.cloudwhile.tscc.data.model.UiToastMessage
 import com.cloudwhile.tscc.data.model.VoiceMode
 import com.cloudwhile.tscc.data.model.WatchingStreamState
+import com.cloudwhile.tscc.data.update.UpdateUiState
 import com.cloudwhile.tscc.data.util.Ts3ServerUri
 import com.cloudwhile.tscc.data.util.Ts3UriParser
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,7 +41,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as TsccApp
     val repository = app.tsccRepository
+    val updateManager = app.appUpdateManager
     private val settingsRepo = app.settingsRepository
+
+    val updateState: StateFlow<UpdateUiState> = updateManager.state
 
     val bookmarks: StateFlow<List<BookmarkEntity>> = repository.bookmarksFlow.stateIn(
         viewModelScope,
@@ -310,6 +314,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateAppLanguage(language: AppLanguage) {
         viewModelScope.launch { settingsRepo.setAppLanguage(language) }
+    }
+
+    fun updateAutoCheckUpdates(enabled: Boolean) {
+        viewModelScope.launch { settingsRepo.setAutoCheckUpdates(enabled) }
+    }
+
+    fun checkForUpdates(manual: Boolean) {
+        val curSettings = settings.value
+        val en = repository.isEnglish()
+        updateManager.checkForUpdates(
+            manual = manual,
+            skippedVersion = curSettings.skippedUpdateVersion,
+            isEnglish = en
+        ) { msg, isError ->
+            showToast(msg, if (isError) ToastTone.ERROR else ToastTone.SUCCESS)
+        }
+    }
+
+    fun skipAvailableUpdate() {
+        val ver = updateState.value.latestRelease?.versionName ?: return
+        viewModelScope.launch {
+            settingsRepo.setSkippedUpdateVersion(ver)
+            updateManager.dismissDialog()
+            val en = repository.isEnglish()
+            showToast(if (en) "Skipped update v$ver" else "已忽略 v$ver 更新提醒")
+        }
+    }
+
+    fun dismissUpdateDialog() {
+        updateManager.dismissDialog()
+    }
+
+    fun cancelUpdateDownload() {
+        updateManager.cancelDownload()
     }
 
     fun clearAllAppData() {

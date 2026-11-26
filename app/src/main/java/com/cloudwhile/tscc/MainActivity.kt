@@ -58,6 +58,7 @@ import com.cloudwhile.tscc.ui.components.AppModalDialog
 import com.cloudwhile.tscc.ui.components.AppNavItem
 import com.cloudwhile.tscc.ui.components.AppPillBottomBar
 import com.cloudwhile.tscc.ui.components.AppTopToast
+import com.cloudwhile.tscc.ui.components.AppUpdateDialog
 import com.cloudwhile.tscc.ui.components.LaunchSplashOverlay
 import com.cloudwhile.tscc.ui.screens.bookmarks.BookmarksScreen
 import com.cloudwhile.tscc.ui.screens.room.IncomingPokeDialog
@@ -125,6 +126,8 @@ private fun MainAppShell(viewModel: MainViewModel) {
 
     var showLaunchSplash by rememberSaveable { mutableStateOf(true) }
     var hasRequestedStartupPerms by rememberSaveable { mutableStateOf(false) }
+    var hasCheckedStartupUpdate by rememberSaveable { mutableStateOf(false) }
+    var pendingInstallAfterPermGrant by remember { mutableStateOf(false) }
     var currentTab by rememberSaveable { mutableStateOf(MainTab.BOOKMARKS) }
     var prevTabIndex by remember { mutableIntStateOf(currentTab.ordinal) }
     var activeToast by remember { mutableStateOf<UiToastMessage?>(null) }
@@ -134,6 +137,7 @@ private fun MainAppShell(viewModel: MainViewModel) {
     var showManualMicSettingsDialog by remember { mutableStateOf(false) }
 
     val settings by viewModel.settings.collectAsState()
+    val updateState by viewModel.updateState.collectAsState()
     val connectionStatus by viewModel.connectionStatus.collectAsState()
     val manualDisconnectSeq by viewModel.manualDisconnectSeq.collectAsState()
     val micPermissionRequestSeq by viewModel.micPermissionRequestSeq.collectAsState()
@@ -158,6 +162,46 @@ private fun MainAppShell(viewModel: MainViewModel) {
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) {
         viewModel.refreshMicPermission()
+    }
+
+    val installPermLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (pendingInstallAfterPermGrant && viewModel.updateManager.canRequestPackageInstalls()) {
+            pendingInstallAfterPermGrant = false
+            viewModel.updateManager.launchInstallerForReadyApk()
+        } else {
+            pendingInstallAfterPermGrant = false
+        }
+    }
+
+    val triggerInstallReadyApk: () -> Unit = {
+        if (viewModel.updateManager.canRequestPackageInstalls()) {
+            if (!viewModel.updateManager.launchInstallerForReadyApk()) {
+                viewModel.showToast(
+                    if (strings.isEnglish) "Unable to launch system APK installer" else "无法唤起系统安装包安装程序",
+                    ToastTone.ERROR
+                )
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            pendingInstallAfterPermGrant = true
+            runCatching {
+                installPermLauncher.launch(
+                    Intent(
+                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:${context.packageName}")
+                    )
+                )
+            }
+        }
+    }
+
+    LaunchedEffect(settings.autoCheckUpdates) {
+        if (!hasCheckedStartupUpdate && settings.autoCheckUpdates) {
+            delay(1600L)
+            hasCheckedStartupUpdate = true
+            viewModel.checkForUpdates(manual = false)
+        }
     }
 
     val micPermLauncher = rememberLauncherForActivityResult(
@@ -445,6 +489,22 @@ private fun MainAppShell(viewModel: MainViewModel) {
         )
     }
 
+    if (updateState.showDialog && updateState.latestRelease != null) {
+        AppUpdateDialog(
+            state = updateState,
+            onStartDownload = {
+                viewModel.updateManager.startDownload(
+                    isEnglish = strings.isEnglish,
+                    onReadyToInstall = { triggerInstallReadyApk() }
+                )
+            },
+            onInstallReadyApk = triggerInstallReadyApk,
+            onCancelDownload = viewModel::cancelUpdateDownload,
+            onSkipVersion = viewModel::skipAvailableUpdate,
+            onDismiss = viewModel::dismissUpdateDialog
+        )
+    }
+
     pendingDeepLink?.let { uri ->
         AppModalDialog(
             title = if (strings.isEnglish) "Join External Voice Server?" else "加入外部语音频道？",
@@ -659,6 +719,7 @@ private fun RoomTabHost(
 @Composable
 private fun SettingsTabHost(viewModel: MainViewModel) {
     val settings by viewModel.settings.collectAsState()
+    val updateState by viewModel.updateState.collectAsState()
     val identities by viewModel.identities.collectAsState()
     val hasMicPermission by viewModel.hasMicPermission.collectAsState()
     val upgradeProgress by viewModel.securityUpgradeProgress.collectAsState()
@@ -670,11 +731,14 @@ private fun SettingsTabHost(viewModel: MainViewModel) {
         settings = settings,
         identities = identities,
         hasMicPermission = hasMicPermission,
+        updateState = updateState,
         upgradeProgress = upgradeProgress,
         inputLevelDb = inputLevelDb,
         isVoiceTransmitting = isVoiceTransmitting,
         isLoopbackTesting = isLoopbackTesting,
         onRequestMicPermission = viewModel::requestMicPermissionFlow,
+        onCheckForUpdates = { viewModel.checkForUpdates(manual = true) },
+        onUpdateAutoCheckUpdates = viewModel::updateAutoCheckUpdates,
         onUpdateNickname = viewModel::updateDefaultNickname,
         onSelectVoiceMode = viewModel::updateVoiceMode,
         onUpdateVadThreshold = viewModel::updateVadThreshold,

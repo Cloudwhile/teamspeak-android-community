@@ -1,44 +1,45 @@
-name: Bug Report / 问题反馈
-description: 报告 TSCC 客户端的崩溃、连接异常或音频问题
+name: Bug Report
+description: Report a crash, connection issue, or audio bug in TSCC / 报告崩溃、连接或音频异常
 title: "[Bug]: "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        感谢反馈问题！注意 TSCC 是非官方社区开源项目，请勿在问题中包含真实服务器私密密码或个人身份 `.ini` 私钥。
+        Thanks for reporting an issue! Note that TSCC is an unofficial community project. Never include private server passwords or `.ini` identity private keys.
+        感谢反馈问题！请勿在报告中附带服务器私密密码或个人 `.ini` 身份私钥。
   - type: input
     id: version
     attributes:
-      label: TSCC 版本与安装包架构
-      placeholder: "例如：v1.0.0 (arm64-v8a)"
+      label: TSCC Version & ABI / 版本与安装包架构
+      placeholder: "e.g. v0.1.0-alpha.1 (arm64-v8a)"
     validations:
       required: true
   - type: input
     id: device
     attributes:
-      label: 设备型号与 Android 系统版本
-      placeholder: "例如：Pixel 8 / Android 14"
+      label: Device & Android Version / 设备型号与系统版本
+      placeholder: "e.g. Pixel 8 / Android 14"
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
-      label: 复现步骤
+      label: Steps to Reproduce / 复现步骤
       placeholder: |
-        1. 连接服务器（TS3 3.13 / TS6）...
-        2. 点击...
-        3. 出现现象...
+        1. Connect to server (TS3 3.13 / TS6)...
+        2. Tap...
+        3. Observed behavior...
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: 预期行为与实际行为
+      label: Expected vs Actual Behavior / 预期与实际行为
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
-      label: 相关日志（Logcat 过滤 tscc_core / TSCC，注意脱敏）
+      label: Relevant Logs / 相关日志 (filter Logcat by tscc_core / TSCC, redact secrets)
       render: shell

@@ -2,11 +2,11 @@
 
 # TSCC
 
-**非官方开源社区语音安卓客户端 · Unofficial TeamSpeak Community Client for Android**
+**Unofficial TeamSpeak Community Client for Android**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Cloudwhile/teamspeak-android-community/ci.yml?branch=master&style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/Cloudwhile/teamspeak-android-community/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Cloudwhile/teamspeak-android-community?include_prereleases&style=for-the-badge&logo=github&label=Release)](https://github.com/Cloudwhile/teamspeak-android-community/releases)
-[![Unofficial](https://img.shields.io/badge/Notice-Unofficial%20Community-f59e0b?style=for-the-badge)](https://github.com/Cloudwhile/teamspeak-android-community#非官方声明--unofficial-disclaimer)
+[![Unofficial](https://img.shields.io/badge/Notice-Unofficial%20Community-f59e0b?style=for-the-badge)](#unofficial-disclaimer)
 [![License](https://img.shields.io/github/license/Cloudwhile/teamspeak-android-community?style=for-the-badge)](./LICENSE)
 
 ![Android](https://img.shields.io/badge/Android-8.0%2B%20(API%2026)-3DDC84?style=flat-square&logo=android&logoColor=white)
@@ -17,68 +17,72 @@
 ![Audio](https://img.shields.io/badge/Audio-Opus%2048kHz%20%2B%20WebRTC-10b981?style=flat-square&logo=webrtc&logoColor=white)
 ![ABIs](https://img.shields.io/badge/ABIs-arm64--v8a%20%7C%20armeabi--v7a%20%7C%20x86__64%20%7C%20universal-0ea5e9?style=flat-square)
 
+**English** · [简体中文](./locales/README.zh-CN.md)
+
 </div>
 
 ---
 
+## Unofficial Disclaimer
+
 > [!IMPORTANT]
-> **非官方声明 / Unofficial Disclaimer**
->
-> **TSCC** 是由社区独立开发与维护的**非官方开源项目**，与 **TeamSpeak Systems GmbH** 无任何隶属、合作、授权或官方背书关系。`TeamSpeak®` 等相关名称与注册商标归其各自权利人所有。
->
-> **TSCC** is an independent, **unofficial** open-source community client and is **not** affiliated with, authorized, endorsed, or sponsored by **TeamSpeak Systems GmbH**. `TeamSpeak®` is a registered trademark of its respective owner.
+> **TSCC** is an independent, **unofficial** open-source community client maintained by community contributors. It is **NOT** affiliated with, authorized, endorsed, or sponsored by **TeamSpeak Systems GmbH**. `TeamSpeak®` and related marks are registered trademarks of their respective owners.
 
-## 功能特性
+## Key Features
 
-- **TS3 / TS6 标准服务器协议连接**
-  - 基于 Rust `tsclientlib` / `tsproto` 实现 `initivexpand2` 握手与加密传输，兼容 TeamSpeak 3（3.13+）与 TeamSpeak 6 社区服务器。
-  - 支持 `_ts3._udp` SRV、`_tsdns._tcp` TSDNS 与 A/AAAA 双栈域名解析，支持 `ts3server://` 与 `teamspeak://` 邀请链接唤起。
-- **桌面端身份互通与本地硬件加密存储**
-  - 支持生成椭圆曲线 P-256 身份密钥、导入或导出桌面端 `.ini` 身份文件，内置多线程并行 SHA-1 安全等级计算（支持中途取消并保留已算进度）。
-  - 本地数据库中的私钥与服务器/频道口令采用 Android Keystore `AES-256-GCM` 加密存储，系统自动备份仅放行界面偏好配置。
-- **48,000 Hz Opus 实时语音与声学处理**
-  - 20 ms 帧长 `DirectByteBuffer` JNI 音频链路，自动适配频道 `Opus Voice` 与 `Opus Music` 编码模式。
-  - 内置 110 Hz 二阶巴特沃斯高通防喷麦滤波、瞬态限幅器、软膝盖混音器与单成员 `0%–200%` 独立音量调节。
-  - 支持语音感应（VAD）、按住说话（PTT）、常开麦、本地 Opus 语音回路自检，以及蓝牙/有线耳机/扬声器/听筒热插拔自动切换与系统来电焦点恢复。
-  - **无麦克风权限可用性降级**：拒绝麦克风权限时自动切换为纯收听前台模式，所有麦克风相关功能保持禁用并在点击时引导授权。
-- **频道管理、文字聊天与 TS6 实时音视频流**
-  - 支持子频道创建、差量编辑、删除、BBCode 简介查看、管理员权限密钥（Privilege Key）激活、频道/服务器/私聊消息以及 TS6 WebRTC 屏幕与摄像头直播收看/推流。
+- **Native TS3 & TS6 Encrypted Protocol Support**
+  - Powered by a Rust protocol and state engine (`tsclientlib` / `tsproto`), supporting `initivexpand2` handshakes and encrypted voice transport with TeamSpeak 3 (3.13+) and TeamSpeak 6 community servers.
+  - Full `_ts3._udp` SRV, `_tsdns._tcp` TSDNS, and dual-stack IPv4/IPv6 resolution, plus `ts3server://` and `teamspeak://` deep-link handling.
+- **Desktop Identity Interoperability & Hardware-Backed Encryption**
+  - Generate P-256 ECC identities, import/export desktop `.ini` identity files, and run multi-core parallel SHA-1 security level upgrades (with pause/cancel progress preservation).
+  - Sensitive database columns (identity private keys and saved server/channel passwords) are encrypted at rest via Android Keystore `AES-256-GCM`, and cloud/device-transfer backup rules allowlist UI preferences only.
+- **48,000 Hz Opus Real-Time Audio & Acoustic DSP**
+  - Zero-copy `DirectByteBuffer` JNI pipeline (20 ms frames) with automatic `Opus Voice` and `Opus Music` channel codec adaptation.
+  - Built-in 110 Hz 2nd-order Butterworth anti-plosive filter, transient peak limiter, soft-knee multi-speaker mixer, and per-member `0%–200%` volume memory.
+  - Voice Activity Detection (VAD), Push-To-Talk (PTT), Continuous transmission, local Opus loopback self-test, automatic Bluetooth/Wired/Speaker/Earpiece hot-plug routing, and phone-call audio focus recovery.
+  - **Graceful Listen-Only Fallback**: Denying microphone permission keeps background playback active without crashing, disables microphone controls across the UI, and guides permission grant on tap.
+- **Channel Management, Text Chat & TS6 Live Streaming**
+  - Sub-channel creation, differential editing, deletion, on-demand BBCode channel descriptions, privilege key redemption, channel/server/direct messaging, and TS6 WebRTC screen/camera streaming.
+- **Built-in Auto-Updater**
+  - Supports startup update checks and manual checks against GitHub Releases (including `alpha.x` / `beta.x` / `rc.x` pre-releases and stable releases), automatically matching the device CPU architecture, verifying `SHA256SUMS.txt`, and launching the Android package installer.
 
-## 多架构安装包下载指南
+## Multi-Architecture Downloads
 
-前往 [GitHub Releases](https://github.com/Cloudwhile/teamspeak-android-community/releases) 下载最新版本的 APK 安装包。每次正式发布均提供以下 **4 个可直接安装的架构包** 与 `SHA256SUMS.txt` 校验文件：
+Download the latest installable APK from [GitHub Releases](https://github.com/Cloudwhile/teamspeak-android-community/releases). Every release provides **4 signed APK variants** alongside `SHA256SUMS.txt`:
 
-| 安装包文件名 | 适用设备架构 | 说明 |
+| Package Filename | Architecture | Recommended Devices |
 | :--- | :--- | :--- |
-| `TSCC-vX.Y.Z-arm64-v8a.apk` | **64 位 ARM（推荐）** | 适用于绝大多数现代 Android 手机与平板，体积最小、运行效率最优 |
-| `TSCC-vX.Y.Z-armeabi-v7a.apk` | **32 位 ARM** | 适用于较早期 32 位 Android 设备、车机或电视盒子 |
-| `TSCC-vX.Y.Z-x86_64.apk` | **64 位 x86** | 适用于 PC 端 Android 模拟器、Waydroid、Chromebook 等 x86_64 环境 |
-| `TSCC-vX.Y.Z-universal.apk` | **全架构通用包** | 同时包含 `arm64-v8a`、`armeabi-v7a`、`x86_64` 原生库，不确定设备架构时可直接安装 |
+| `TSCC-vX.Y.Z-arm64-v8a.apk` | **64-bit ARM (Recommended)** | Modern 64-bit Android phones and tablets — smallest size & best performance |
+| `TSCC-vX.Y.Z-armeabi-v7a.apk` | **32-bit ARM** | Legacy 32-bit Android phones, head units, and TV boxes |
+| `TSCC-vX.Y.Z-x86_64.apk` | **64-bit x86** | Android Studio Emulator, Waydroid, ChromeOS, and x86_64 environments |
+| `TSCC-vX.Y.Z-universal.apk` | **Universal (All ABIs)** | Combined fat APK containing `arm64-v8a`, `armeabi-v7a`, and `x86_64` |
 
-## 本地构建与测试
+## Building from Source
 
-### 环境要求
+### Prerequisites
 
 - **JDK 17**
-- **Android SDK**（`compileSdk 34`、`NDK 28.2.13676358`、`CMake 3.22.1`、Ninja）
-- **Rust Stable 工具链** + `cargo-ndk`：
+- **Android SDK** (`compileSdk 34`, `NDK 28.2.13676358`, `CMake 3.22.1`, Ninja)
+- **Rust Stable Toolchain** + `cargo-ndk`:
   ```bash
   rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
   cargo install cargo-ndk
   ```
 
-### 编译命令
+### Build & Test Commands
+
+Linux / macOS:
 
 ```bash
-# 1. 运行 Rust 协议与音频引擎单元测试
+# 1. Run Rust protocol, resolver, and DSP unit tests
 OPUS_STATIC=1 OPUS_NO_PKG=1 CMAKE_POLICY_VERSION_MINIMUM=3.5 \
   cargo test --manifest-path rust-core/Cargo.toml
 
-# 2. 运行 Android 单元测试、Release Lint 校验并构建全部架构 Release APK
+# 2. Run Android unit tests, Release Lint, and assemble all multi-ABI Release APKs
 ./gradlew :app:testDebugUnitTest :app:lintVitalRelease :app:assembleRelease
 ```
 
-Windows PowerShell 下可执行：
+Windows PowerShell:
 
 ```powershell
 $env:OPUS_STATIC="1"; $env:OPUS_NO_PKG="1"; $env:CMAKE_POLICY_VERSION_MINIMUM="3.5"
@@ -86,31 +90,31 @@ cargo test --manifest-path rust-core\Cargo.toml
 .\gradlew.bat :app:testDebugUnitTest :app:lintVitalRelease :app:assembleRelease
 ```
 
-构建完成后，多架构安装包输出于 `app/build/outputs/apk/release/` 目录。
+Release APKs are written to `app/build/outputs/apk/release/`.
 
-## CI/CD 与发布签名配置
+## CI/CD & Release Signing
 
-仓库内置严格的标准 GitHub Actions 工作流：
+Standard GitHub Actions workflows are configured under `.github/workflows/`:
 
-- **持续集成（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）**：在推送或提交 PR 至 `master` 分支时自动执行 Rust 单元测试、三架构 JNI 交叉编译、Kotlin 单元测试、`lintVitalRelease` 静态检查以及 Debug/Release 多架构构建。
-- **版本发布（[`.github/workflows/release.yml`](.github/workflows/release.yml)）**：推送语义化版本标签（如 `v1.0.0`）或手动触发时，自动执行全套质量门禁、构建并校验 `arm64-v8a` / `armeabi-v7a` / `x86_64` / `universal` 四个签名 APK、生成 `SHA256SUMS.txt` 并创建 GitHub Release。
+- **Continuous Integration ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))**: Runs on pushes and pull requests to `master`, executing Rust unit tests, 3-ABI Android NDK cross-compilation, Kotlin unit tests, `lintVitalRelease`, and Debug/Release APK verification.
+- **Release Publishing ([`.github/workflows/release.yml`](.github/workflows/release.yml))**: Triggered by SemVer tags (such as `v0.1.0-alpha.1`, `v0.1.0-beta.1`, or `v0.1.0`) or `workflow_dispatch`. Builds, verifies (`apksigner verify`), checksums (`SHA256SUMS.txt`), and publishes all 4 installable multi-ABI APKs to GitHub Releases.
 
-如需在 GitHub Actions 中使用自定义正式证书签名，可在仓库 `Settings -> Secrets and variables -> Actions` 中配置以下 Secrets（未配置时构建脚本将回退至可安装的默认调试签名以保证产物可安装验证）：
+To sign release builds with your production certificate in GitHub Actions, configure the following repository secrets under `Settings -> Secrets and variables -> Actions` (if omitted, builds fall back to an installable debug signature):
 
-| Secret 名称 | 说明 |
+| Secret Name | Description |
 | :--- | :--- |
-| `SIGNING_KEYSTORE_BASE64` | `.jks` 或 `.keystore` 证书文件的 Base64 编码字符串（`base64 -w 0 release.jks`） |
-| `SIGNING_STORE_PASSWORD` | Keystore 密码 |
-| `SIGNING_KEY_ALIAS` | 密钥别名（Key Alias） |
-| `SIGNING_KEY_PASSWORD` | 密钥密码（Key Password） |
+| `SIGNING_KEYSTORE_BASE64` | Base64-encoded `.jks` or `.keystore` file (`base64 -w 0 release.jks`) |
+| `SIGNING_STORE_PASSWORD` | Keystore password |
+| `SIGNING_KEY_ALIAS` | Signing key alias |
+| `SIGNING_KEY_PASSWORD` | Signing key password |
 
-## 致谢与开源组件
+## Open-Source Acknowledgments
 
-- [ReSpeak / tsclientlib](https://github.com/ReSpeak/tsclientlib) — Rust TeamSpeak 协议栈与状态机实现（MIT / Apache-2.0）
-- [Xiph.Org / Opus](https://opus-codec.org/) — 48 kHz 交互式语音与音乐编解码器（BSD-3-Clause）
-- [GetStream / webrtc-android](https://github.com/GetStream/webrtc-android) — Android WebRTC 音视频传输库（BSD-3-Clause / Apache-2.0）
-- [Hickory DNS](https://github.com/hickory-dns/hickory-dns) — 异步 DNS / SRV 解析器（MIT / Apache-2.0）
+- [ReSpeak / tsclientlib](https://github.com/ReSpeak/tsclientlib) — Rust TeamSpeak protocol & state machine implementation (MIT / Apache-2.0)
+- [Xiph.Org / Opus](https://opus-codec.org/) — 48 kHz interactive speech and music audio codec (BSD-3-Clause)
+- [GetStream / webrtc-android](https://github.com/GetStream/webrtc-android) — WebRTC real-time video/audio library for Android (BSD-3-Clause / Apache-2.0)
+- [Hickory DNS](https://github.com/hickory-dns/hickory-dns) — Async DNS and SRV resolver library (MIT / Apache-2.0)
 
-## 许可证
+## License
 
-本项目基于 [MIT License](./LICENSE) 开源。
+Licensed under the [MIT License](./LICENSE).

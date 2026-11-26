@@ -25,7 +25,9 @@ data class AppSettings(
     val hardwareAgcEnabled: Boolean = true,
     val overlayEnabled: Boolean = false,
     val darkTheme: Boolean = true,
-    val appLanguage: AppLanguage = AppLanguage.SYSTEM
+    val appLanguage: AppLanguage = AppLanguage.SYSTEM,
+    val autoCheckUpdates: Boolean = true,
+    val skippedUpdateVersion: String = ""
 )
 
 class SettingsRepository(private val context: Context) {
@@ -42,6 +44,8 @@ class SettingsRepository(private val context: Context) {
         val OVERLAY_ENABLED = booleanPreferencesKey("overlay_enabled")
         val DARK_THEME = booleanPreferencesKey("dark_theme")
         val APP_LANGUAGE = stringPreferencesKey("app_language")
+        val AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
+        val SKIPPED_UPDATE_VERSION = stringPreferencesKey("skipped_update_version")
     }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -56,7 +60,9 @@ class SettingsRepository(private val context: Context) {
             hardwareAgcEnabled = prefs[Keys.HW_AGC] ?: true,
             overlayEnabled = prefs[Keys.OVERLAY_ENABLED] ?: false,
             darkTheme = prefs[Keys.DARK_THEME] ?: true,
-            appLanguage = AppLanguage.fromCode(prefs[Keys.APP_LANGUAGE])
+            appLanguage = AppLanguage.fromCode(prefs[Keys.APP_LANGUAGE]),
+            autoCheckUpdates = prefs[Keys.AUTO_CHECK_UPDATES] ?: true,
+            skippedUpdateVersion = prefs[Keys.SKIPPED_UPDATE_VERSION].orEmpty()
         )
     }
 
@@ -98,6 +104,14 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setAppLanguage(language: AppLanguage) {
         context.dataStore.edit { it[Keys.APP_LANGUAGE] = language.code }
+    }
+
+    suspend fun setAutoCheckUpdates(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.AUTO_CHECK_UPDATES] = enabled }
+    }
+
+    suspend fun setSkippedUpdateVersion(version: String) {
+        context.dataStore.edit { it[Keys.SKIPPED_UPDATE_VERSION] = version.trim() }
     }
 
     suspend fun clearAllSettings() {

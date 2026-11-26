@@ -57,6 +57,7 @@ import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -91,6 +92,8 @@ import com.cloudwhile.tscc.data.AppSettings
 import com.cloudwhile.tscc.data.db.IdentityEntity
 import com.cloudwhile.tscc.data.model.AppLanguage
 import com.cloudwhile.tscc.data.model.VoiceMode
+import com.cloudwhile.tscc.data.update.UpdateStatus
+import com.cloudwhile.tscc.data.update.UpdateUiState
 import com.cloudwhile.tscc.ui.components.AppBrandLogo
 import com.cloudwhile.tscc.ui.components.AppCapsuleField
 import com.cloudwhile.tscc.ui.components.AppCircleIconButton
@@ -184,11 +187,14 @@ fun SettingsScreen(
     settings: AppSettings,
     identities: List<IdentityEntity>,
     hasMicPermission: Boolean = true,
+    updateState: UpdateUiState = UpdateUiState(),
     upgradeProgress: Pair<Int, Long>?,
     inputLevelDb: Float,
     isVoiceTransmitting: Boolean,
     isLoopbackTesting: Boolean,
     onRequestMicPermission: () -> Unit = {},
+    onCheckForUpdates: () -> Unit = {},
+    onUpdateAutoCheckUpdates: (Boolean) -> Unit = {},
     onUpdateNickname: (String) -> Unit,
     onSelectVoiceMode: (VoiceMode) -> Unit,
     onUpdateVadThreshold: (Float) -> Unit,
@@ -239,10 +245,13 @@ fun SettingsScreen(
                 SettingsHubRoot(
                     settings = settings,
                     identities = identities,
+                    updateState = updateState,
                     onUpdateNickname = onUpdateNickname,
                     onUpdateLanguage = onUpdateLanguage,
                     onUpdateDarkTheme = onUpdateDarkTheme,
                     onUpdateOverlayEnabled = onUpdateOverlayEnabled,
+                    onCheckForUpdates = onCheckForUpdates,
+                    onUpdateAutoCheckUpdates = onUpdateAutoCheckUpdates,
                     onOpenIdentities = { subPage = SettingsSubPage.IDENTITIES },
                     onOpenVoiceDsp = { subPage = SettingsSubPage.VOICE_DSP },
                     onOpenAbout = { subPage = SettingsSubPage.ABOUT },
@@ -286,6 +295,8 @@ fun SettingsScreen(
 
             SettingsSubPage.ABOUT -> {
                 AboutAppSubScreen(
+                    updateState = updateState,
+                    onCheckForUpdates = onCheckForUpdates,
                     onOpenLicenses = { subPage = SettingsSubPage.OPEN_SOURCE },
                     onBack = { subPage = SettingsSubPage.ROOT }
                 )
@@ -321,10 +332,13 @@ fun SettingsScreen(
 private fun SettingsHubRoot(
     settings: AppSettings,
     identities: List<IdentityEntity>,
+    updateState: UpdateUiState,
     onUpdateNickname: (String) -> Unit,
     onUpdateLanguage: (AppLanguage) -> Unit,
     onUpdateDarkTheme: (Boolean) -> Unit,
     onUpdateOverlayEnabled: (Boolean) -> Unit,
+    onCheckForUpdates: () -> Unit,
+    onUpdateAutoCheckUpdates: (Boolean) -> Unit,
     onOpenIdentities: () -> Unit,
     onOpenVoiceDsp: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -495,9 +509,45 @@ private fun SettingsHubRoot(
             }
         }
 
-        // Section 4: About, Open Source Licenses & Clear All App Data
+        // Section 4: Updates, About, Open Source Licenses & Clear All App Data
         item {
+            val hasNewVersion = updateState.status == UpdateStatus.AVAILABLE ||
+                updateState.status == UpdateStatus.READY_TO_INSTALL ||
+                updateState.status == UpdateStatus.DOWNLOADING
+            val updateBadge = when {
+                updateState.status == UpdateStatus.CHECKING -> if (strings.isEnglish) "Checking..." else "检查中..."
+                hasNewVersion -> "NEW · v${updateState.latestRelease?.versionName.orEmpty()}"
+                else -> "v${BuildConfig.VERSION_NAME}"
+            }
+
             SettingsSectionCard(title = strings.sectionAboutAndData) {
+                SettingsNavEntryRow(
+                    icon = Icons.Default.SystemUpdate,
+                    iconBg = if (hasNewVersion) colors.emeraldSoft else colors.periwinkleSoft,
+                    iconTint = if (hasNewVersion) colors.emerald else colors.periwinkle,
+                    title = if (strings.isEnglish) "Check for Updates" else "检查并下载更新",
+                    subtitle = if (strings.isEnglish) {
+                        "Auto-match device CPU architecture APK from GitHub Releases"
+                    } else {
+                        "自动匹配本机架构安装包并校验下载安装"
+                    },
+                    badgeText = updateBadge,
+                    onClick = onCheckForUpdates
+                )
+
+                SettingToggleRow(
+                    title = if (strings.isEnglish) "Auto-Check Updates on Startup" else "启动时自动检查更新",
+                    subtitle = if (strings.isEnglish) {
+                        "Prompt when a newer release or pre-release is published"
+                    } else {
+                        "打开应用时后台静默检测新版本并提醒下载安装"
+                    },
+                    checked = settings.autoCheckUpdates,
+                    onCheckedChange = onUpdateAutoCheckUpdates
+                )
+
+                DashedHorizontalLine(color = colors.border, modifier = Modifier.fillMaxWidth())
+
                 SettingsNavEntryRow(
                     icon = Icons.Default.Info,
                     iconBg = colors.periwinkleSoft,
@@ -852,6 +902,8 @@ private fun VoiceDspSubScreen(
 
 @Composable
 private fun AboutAppSubScreen(
+    updateState: UpdateUiState = UpdateUiState(),
+    onCheckForUpdates: () -> Unit = {},
     onOpenLicenses: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -1028,8 +1080,28 @@ private fun AboutAppSubScreen(
 
         item {
             AppPrimaryPillButton(
+                text = when (updateState.status) {
+                    UpdateStatus.CHECKING -> if (strings.isEnglish) "Checking for Updates..." else "正在检查更新..."
+                    UpdateStatus.AVAILABLE, UpdateStatus.READY_TO_INSTALL -> if (strings.isEnglish) {
+                        "Update to v${updateState.latestRelease?.versionName.orEmpty()}"
+                    } else {
+                        "发现新版本 v${updateState.latestRelease?.versionName.orEmpty()} · 点击更新"
+                    }
+                    else -> if (strings.isEnglish) "Check for Updates" else "检查并下载更新"
+                },
+                leadingIcon = Icons.Default.SystemUpdate,
+                enabled = updateState.status != UpdateStatus.CHECKING,
+                onClick = onCheckForUpdates,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        item {
+            AppPrimaryPillButton(
                 text = strings.openSourceTitle,
                 leadingIcon = Icons.Default.Code,
+                containerColor = colors.cardElevated,
+                contentColor = colors.textPrimary,
                 onClick = onOpenLicenses,
                 modifier = Modifier.fillMaxWidth()
             )

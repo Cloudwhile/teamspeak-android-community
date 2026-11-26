@@ -1,9 +1,9 @@
-## 变更概述
+## Summary / 变更概述
 
 - 
 
-## 测试与验证清单
+## Verification Checklist / 验证清单
 
-- [ ] `cargo test --manifest-path rust-core/Cargo.toml` 全部通过
-- [ ] `./gradlew :app:testDebugUnitTest :app:lintVitalRelease :app:assembleRelease` 编译通过
-- [ ] 未提交任何私钥、签名证书（`.jks` / `.keystore` / `keystore.properties`）或敏感地址口令
+- [ ] `cargo test --manifest-path rust-core/Cargo.toml` passes
+- [ ] `./gradlew :app:testDebugUnitTest :app:lintVitalRelease :app:assembleRelease` passes
+- [ ] No private keys, signing keystores (`.jks` / `.keystore` / `keystore.properties`), or sensitive credentials included
