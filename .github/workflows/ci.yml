@@ -94,7 +94,7 @@ jobs:
           key: android-ndk-28
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Execute unit tests, Release Lint & multi-ABI builds
         run: |

@@ -106,7 +106,7 @@ jobs:
           key: release-ndk-28
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Run Rust core test suite
         run: cargo test --manifest-path rust-core/Cargo.toml --locked
