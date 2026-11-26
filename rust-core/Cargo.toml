@@ -14,7 +14,7 @@ tsproto-packets = { git = "https://github.com/ReSpeak/tsclientlib.git" }
 tsproto-types = { git = "https://github.com/ReSpeak/tsclientlib.git" }
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "macros", "io-util", "fs"] }
 futures = "0.3"
-jni = "0.21"
+jni = "0.22"
 audiopus = "0.3.0-rc.0"
 hickory-resolver = "0.26"
 hickory-net = "0.26"
