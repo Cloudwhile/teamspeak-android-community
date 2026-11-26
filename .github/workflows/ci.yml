@@ -70,7 +70,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends ninja-build
 
       - name: Set up Android SDK, NDK & CMake
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install required Android SDK & NDK components
         run: |
