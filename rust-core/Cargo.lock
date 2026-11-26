@@ -2185,7 +2185,7 @@ version = "0.1.0"
 dependencies = [
  "android_logger",
  "audiopus",
- "base64 0.22.1",
+ "base64 0.23.1",
  "futures",
  "hickory-net",
  "hickory-resolver",
