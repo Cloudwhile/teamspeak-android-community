@@ -5,12 +5,22 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
+import android.provider.Settings
 import androidx.core.content.ContextCompat
+import com.cloudwhile.tscc.BuildConfig
 import com.cloudwhile.tscc.TsccApp
+import com.cloudwhile.tscc.data.backup.TsccBackupBookmark
+import com.cloudwhile.tscc.data.backup.TsccBackupIdentity
+import com.cloudwhile.tscc.data.backup.TsccBackupSettings
+import com.cloudwhile.tscc.data.backup.TsccBackupUserAudioPref
+import com.cloudwhile.tscc.data.backup.TsccConfigBackupCodec
+import com.cloudwhile.tscc.data.backup.TsccConfigImportSummary
+import com.cloudwhile.tscc.data.backup.TsccConfigPayload
 import com.cloudwhile.tscc.data.db.AppDatabase
 import com.cloudwhile.tscc.data.db.BookmarkEntity
 import com.cloudwhile.tscc.data.db.IdentityEntity
 import com.cloudwhile.tscc.data.db.UserAudioPrefEntity
+import com.cloudwhile.tscc.data.model.AppLanguage
 import com.cloudwhile.tscc.data.model.AudioRoute
 import com.cloudwhile.tscc.data.model.ChannelLifecycle
 import com.cloudwhile.tscc.data.model.ChannelNode
@@ -1445,6 +1455,283 @@ class TsccRepository(
         if (clientId <= 0 || channelId <= 0L || channelGroupId <= 0L || !NativeBridge.ensureLoaded()) return
         repoScope.launch {
             NativeBridge.nativeSetClientChannelGroup(clientId, channelId, channelGroupId)
+        }
+    }
+
+    // --- TSCC Configuration Backup & Restore ---
+
+    suspend fun exportTsccConfig(
+        includeIdentities: Boolean = true,
+        includeBookmarks: Boolean = true,
+        includeSettings: Boolean = true,
+        password: String = ""
+    ): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            require(includeIdentities || includeBookmarks || includeSettings) {
+                if (isEnglish()) {
+                    "Select at least one section to export"
+                } else {
+                    "请至少勾选一项要导出的配置内容"
+                }
+            }
+
+            val allIdentities = db.identityDao().getAll().map { it.decrypted() }
+            val idToUidMap = allIdentities.associate { it.id to it.uniqueId }
+
+            val exportedIdentities = if (includeIdentities) {
+                allIdentities.map { id ->
+                    TsccBackupIdentity(
+                        name = id.name,
+                        uniqueId = id.uniqueId,
+                        publicKeyBase64 = id.publicKeyBase64,
+                        iniPayload = id.iniPayload,
+                        securityLevel = id.securityLevel,
+                        isDefault = id.isDefault,
+                        createdAt = id.createdAt
+                    )
+                }
+            } else {
+                emptyList()
+            }
+
+            val exportedBookmarks = if (includeBookmarks) {
+                db.bookmarkDao().getAll().map { it.decrypted() }.map { bm ->
+                    TsccBackupBookmark(
+                        label = bm.label,
+                        address = bm.address,
+                        port = bm.port,
+                        nickname = bm.nickname,
+                        serverPassword = bm.serverPassword,
+                        defaultChannel = bm.defaultChannel,
+                        channelPassword = bm.channelPassword,
+                        identityUniqueId = bm.identityId?.let { idToUidMap[it] },
+                        lastConnectedAt = bm.lastConnectedAt
+                    )
+                }
+            } else {
+                emptyList()
+            }
+
+            val curSettings = appSettings.value
+            val exportedSettings = if (includeSettings) {
+                TsccBackupSettings(
+                    defaultNickname = curSettings.defaultNickname,
+                    voiceModeCode = curSettings.voiceMode.code,
+                    vadThresholdDb = curSettings.vadThresholdDb,
+                    antiPlosiveEnabled = curSettings.antiPlosiveEnabled,
+                    soundCuesEnabled = curSettings.soundCuesEnabled,
+                    hardwareAecEnabled = curSettings.hardwareAecEnabled,
+                    hardwareNsEnabled = curSettings.hardwareNsEnabled,
+                    hardwareAgcEnabled = curSettings.hardwareAgcEnabled,
+                    overlayEnabled = curSettings.overlayEnabled,
+                    darkTheme = curSettings.darkTheme,
+                    appLanguageCode = curSettings.appLanguage.code,
+                    autoCheckUpdates = curSettings.autoCheckUpdates
+                )
+            } else {
+                null
+            }
+
+            val exportedAudioPrefs = if (includeSettings) {
+                db.userAudioPrefDao().getAll().map { pref ->
+                    TsccBackupUserAudioPref(
+                        clientUid = pref.clientUid,
+                        nicknameHint = pref.nicknameHint,
+                        volumePercent = pref.volumePercent,
+                        localMuted = pref.localMuted,
+                        updatedAt = pref.updatedAt
+                    )
+                }
+            } else {
+                emptyList()
+            }
+
+            TsccConfigBackupCodec.encode(
+                payload = TsccConfigPayload(
+                    identities = exportedIdentities,
+                    bookmarks = exportedBookmarks,
+                    settings = exportedSettings,
+                    userAudioPrefs = exportedAudioPrefs
+                ),
+                password = password,
+                appVersion = BuildConfig.VERSION_NAME
+            )
+        }
+    }
+
+    suspend fun importTsccConfig(
+        rawJson: String,
+        password: String = ""
+    ): Result<TsccConfigImportSummary> = withContext(Dispatchers.IO) {
+        TsccConfigBackupCodec.decode(rawJson, password).mapCatching { payload ->
+            val nativeReady = NativeBridge.ensureLoaded()
+            val existingIdentities = db.identityDao().getAll().map { it.decrypted() }.toMutableList()
+            val uidToLocalId = existingIdentities.associate { it.uniqueId to it.id }.toMutableMap()
+
+            var importedIdentitiesCount = 0
+            var preferredDefaultUid: String? = null
+
+            for (item in payload.identities) {
+                if (item.iniPayload.isBlank()) continue
+                val verified = if (nativeReady) {
+                    NativeBridge.inspectIdentityIni(item.iniPayload).getOrNull() ?: continue
+                } else {
+                    null
+                }
+                val uid = verified?.uniqueId ?: item.uniqueId.trim()
+                val pubKey = verified?.publicKeyBase64 ?: item.publicKeyBase64.trim()
+                val iniContent = verified?.iniContent ?: item.iniPayload
+                val secLevel = verified?.securityLevel ?: item.securityLevel
+                if (uid.isEmpty() || pubKey.isEmpty()) continue
+
+                if (item.isDefault && preferredDefaultUid == null) {
+                    preferredDefaultUid = uid
+                }
+
+                val existingIdx = existingIdentities.indexOfFirst { it.uniqueId == uid }
+                if (existingIdx >= 0) {
+                    val cur = existingIdentities[existingIdx]
+                    val shouldUpgradeIni = secLevel > cur.securityLevel
+                    val isPlaceholderName = cur.name == "默认身份" || cur.name == "Default Identity"
+                    val resolvedName = if (isPlaceholderName && item.name.isNotBlank()) {
+                        item.name.trim()
+                    } else {
+                        cur.name
+                    }
+                    if (shouldUpgradeIni || resolvedName != cur.name) {
+                        val updatedPlain = cur.copy(
+                            name = resolvedName,
+                            iniPayload = if (shouldUpgradeIni) iniContent else cur.iniPayload,
+                            securityLevel = maxOf(cur.securityLevel, secLevel)
+                        )
+                        db.identityDao().update(updatedPlain.encrypted())
+                        existingIdentities[existingIdx] = updatedPlain
+                    }
+                    uidToLocalId[uid] = cur.id
+                    importedIdentitiesCount++
+                } else {
+                    val fallbackName = if (isEnglish()) {
+                        "Imported (${uid.take(6)})"
+                    } else {
+                        "导入身份 (${uid.take(6)})"
+                    }
+                    val plainEntity = IdentityEntity(
+                        name = item.name.trim().ifBlank { fallbackName },
+                        uniqueId = uid,
+                        publicKeyBase64 = pubKey,
+                        iniPayload = iniContent,
+                        securityLevel = secLevel,
+                        isDefault = existingIdentities.isEmpty(),
+                        createdAt = if (item.createdAt > 0L) item.createdAt else System.currentTimeMillis()
+                    )
+                    val insertedId = db.identityDao().insert(plainEntity.encrypted())
+                    val stored = plainEntity.copy(id = insertedId)
+                    existingIdentities.add(stored)
+                    uidToLocalId[uid] = insertedId
+                    importedIdentitiesCount++
+                }
+            }
+
+            preferredDefaultUid?.let { defUid ->
+                uidToLocalId[defUid]?.let { targetId ->
+                    db.identityDao().setDefaultIdentity(targetId)
+                }
+            }
+
+            val existingBookmarks = db.bookmarkDao().getAll().map { it.decrypted() }.toMutableList()
+            var importedBookmarksCount = 0
+            for (bm in payload.bookmarks) {
+                val host = bm.address.trim()
+                if (host.isEmpty()) continue
+                val port = bm.port.takeIf { it in 1..65535 } ?: 9987
+                val label = bm.label.trim().ifBlank { if (port == 9987) host else "$host:$port" }
+                val nick = bm.nickname.trim().ifBlank {
+                    payload.settings?.defaultNickname?.trim()?.takeIf { it.isNotEmpty() }
+                        ?: appSettings.value.defaultNickname
+                }
+                val resolvedIdentityId = bm.identityUniqueId?.let { uidToLocalId[it] }
+
+                val dupIdx = existingBookmarks.indexOfFirst {
+                    it.address.equals(host, ignoreCase = true) &&
+                        it.port == port &&
+                        it.label == label &&
+                        it.defaultChannel == bm.defaultChannel
+                }
+                if (dupIdx >= 0) {
+                    val cur = existingBookmarks[dupIdx]
+                    val merged = cur.copy(
+                        nickname = nick,
+                        serverPassword = bm.serverPassword.ifEmpty { cur.serverPassword },
+                        defaultChannel = bm.defaultChannel.ifEmpty { cur.defaultChannel },
+                        channelPassword = bm.channelPassword.ifEmpty { cur.channelPassword },
+                        identityId = resolvedIdentityId ?: cur.identityId,
+                        lastConnectedAt = maxOf(cur.lastConnectedAt, bm.lastConnectedAt)
+                    )
+                    db.bookmarkDao().update(merged.encrypted())
+                    existingBookmarks[dupIdx] = merged
+                } else {
+                    val newPlain = BookmarkEntity(
+                        label = label,
+                        address = host,
+                        port = port,
+                        nickname = nick,
+                        serverPassword = bm.serverPassword,
+                        defaultChannel = bm.defaultChannel,
+                        channelPassword = bm.channelPassword,
+                        identityId = resolvedIdentityId,
+                        lastConnectedAt = bm.lastConnectedAt
+                    )
+                    val newId = db.bookmarkDao().upsert(newPlain.encrypted())
+                    existingBookmarks.add(newPlain.copy(id = newId))
+                }
+                importedBookmarksCount++
+            }
+
+            var settingsRestored = false
+            payload.settings?.let { s ->
+                val canOverlay = s.overlayEnabled && Settings.canDrawOverlays(context)
+                settingsRepository.restoreAllSettings(
+                    defaultNickname = s.defaultNickname,
+                    voiceMode = VoiceMode.fromCode(s.voiceModeCode),
+                    vadThresholdDb = s.vadThresholdDb,
+                    antiPlosiveEnabled = s.antiPlosiveEnabled,
+                    soundCuesEnabled = s.soundCuesEnabled,
+                    aecEnabled = s.hardwareAecEnabled,
+                    nsEnabled = s.hardwareNsEnabled,
+                    agcEnabled = s.hardwareAgcEnabled,
+                    overlayEnabled = canOverlay,
+                    darkTheme = s.darkTheme,
+                    appLanguage = AppLanguage.fromCode(s.appLanguageCode),
+                    autoCheckUpdates = s.autoCheckUpdates
+                )
+                settingsRestored = true
+            }
+
+            var audioPrefsCount = 0
+            for (pref in payload.userAudioPrefs) {
+                val uid = pref.clientUid.trim()
+                if (uid.isEmpty()) continue
+                db.userAudioPrefDao().upsert(
+                    UserAudioPrefEntity(
+                        clientUid = uid,
+                        nicknameHint = pref.nicknameHint,
+                        volumePercent = pref.volumePercent.coerceIn(0, 200),
+                        localMuted = pref.localMuted,
+                        updatedAt = if (pref.updatedAt > 0L) pref.updatedAt else System.currentTimeMillis()
+                    )
+                )
+                audioPrefsCount++
+            }
+            if (audioPrefsCount > 0 && _connectionStatus.value == ConnectionStatus.CONNECTED) {
+                applyStoredUserAudioPrefsToNative()
+            }
+
+            TsccConfigImportSummary(
+                identitiesCount = importedIdentitiesCount,
+                bookmarksCount = importedBookmarksCount,
+                settingsRestored = settingsRestored,
+                audioPrefsCount = audioPrefsCount
+            )
         }
     }
 

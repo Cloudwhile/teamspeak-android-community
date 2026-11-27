@@ -165,4 +165,34 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun restoreAllSettings(
+        defaultNickname: String,
+        voiceMode: VoiceMode,
+        vadThresholdDb: Float,
+        antiPlosiveEnabled: Boolean,
+        soundCuesEnabled: Boolean,
+        aecEnabled: Boolean,
+        nsEnabled: Boolean,
+        agcEnabled: Boolean,
+        overlayEnabled: Boolean,
+        darkTheme: Boolean,
+        appLanguage: AppLanguage,
+        autoCheckUpdates: Boolean
+    ) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.DEFAULT_NICKNAME] = defaultNickname.trim().ifBlank { "TSCC_Player" }
+            prefs[Keys.VOICE_MODE] = voiceMode.code
+            prefs[Keys.VAD_THRESHOLD_DB] = vadThresholdDb.coerceIn(-75f, -5f)
+            prefs[Keys.ANTI_PLOSIVE] = antiPlosiveEnabled
+            prefs[Keys.SOUND_CUES] = soundCuesEnabled
+            prefs[Keys.HW_AEC] = aecEnabled
+            prefs[Keys.HW_NS] = nsEnabled
+            prefs[Keys.HW_AGC] = agcEnabled
+            prefs[Keys.OVERLAY_ENABLED] = overlayEnabled
+            prefs[Keys.DARK_THEME] = darkTheme
+            prefs[Keys.APP_LANGUAGE] = appLanguage.code
+            prefs[Keys.AUTO_CHECK_UPDATES] = autoCheckUpdates
+            prefs[Keys.ONBOARDING_COMPLETED] = true
+        }
+    }
 }

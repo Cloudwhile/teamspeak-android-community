@@ -49,16 +49,22 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -81,11 +87,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import com.cloudwhile.tscc.BuildConfig
 import com.cloudwhile.tscc.data.AppSettings
+import com.cloudwhile.tscc.data.backup.TsccConfigBackupCodec
 import com.cloudwhile.tscc.data.db.IdentityEntity
 import com.cloudwhile.tscc.data.model.AppLanguage
 import com.cloudwhile.tscc.data.model.VoiceMode
@@ -97,12 +107,17 @@ import com.cloudwhile.tscc.ui.components.AppCircleIconButton
 import com.cloudwhile.tscc.ui.components.AppModalDialog
 import com.cloudwhile.tscc.ui.components.AppPrimaryPillButton
 import com.cloudwhile.tscc.ui.components.AppScreenHeader
+import com.cloudwhile.tscc.ui.components.AppSecondaryPillButton
 import com.cloudwhile.tscc.ui.components.AppSegmentedPills
 import com.cloudwhile.tscc.ui.components.DashedHorizontalLine
 import com.cloudwhile.tscc.ui.components.pressableScale
 import com.cloudwhile.tscc.ui.i18n.localizeIdentityDisplayName
 import com.cloudwhile.tscc.ui.screens.identities.IdentitiesScreen
 import com.cloudwhile.tscc.ui.theme.AppTheme
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToInt
 
 private enum class SettingsSubPage(val depth: Int) {
@@ -110,6 +125,7 @@ private enum class SettingsSubPage(val depth: Int) {
     IDENTITIES(1),
     VOICE_DSP(1),
     GENERAL_APPEARANCE(1),
+    CONFIG_BACKUP(1),
     ABOUT(1),
     OPEN_SOURCE(2)
 }
@@ -185,6 +201,7 @@ private val OPEN_SOURCE_COMPONENTS = listOf(
 fun SettingsScreen(
     settings: AppSettings,
     identities: List<IdentityEntity>,
+    bookmarksCount: Int = 0,
     hasMicPermission: Boolean = true,
     updateState: UpdateUiState = UpdateUiState(),
     upgradeProgress: Pair<Int, Long>?,
@@ -210,6 +227,18 @@ fun SettingsScreen(
     onCancelUpgrade: () -> Unit,
     onSetDefaultIdentity: (Long) -> Unit,
     onDeleteIdentity: (IdentityEntity) -> Unit,
+    onExportConfig: (
+        includeIdentities: Boolean,
+        includeBookmarks: Boolean,
+        includeSettings: Boolean,
+        password: String,
+        onReady: (String) -> Unit
+    ) -> Unit = { _, _, _, _, _ -> },
+    onImportConfig: (
+        rawJson: String,
+        password: String,
+        onComplete: (Boolean) -> Unit
+    ) -> Unit = { _, _, _ -> },
     onClearAllAppData: () -> Unit,
     onShowMessage: (String) -> Unit
 ) {
@@ -248,12 +277,14 @@ fun SettingsScreen(
                 SettingsHubRoot(
                     settings = settings,
                     identities = identities,
+                    bookmarksCount = bookmarksCount,
                     updateState = updateState,
                     onUpdateDarkTheme = onUpdateDarkTheme,
                     onOpenEditNickname = { showNicknameDialog = true },
                     onOpenIdentities = { subPage = SettingsSubPage.IDENTITIES },
                     onOpenVoiceDsp = { subPage = SettingsSubPage.VOICE_DSP },
                     onOpenGeneralAppearance = { subPage = SettingsSubPage.GENERAL_APPEARANCE },
+                    onOpenConfigBackup = { subPage = SettingsSubPage.CONFIG_BACKUP },
                     onOpenAbout = { subPage = SettingsSubPage.ABOUT },
                     onRequestClearAllData = { showClearDataConfirm = true }
                 )
@@ -298,6 +329,17 @@ fun SettingsScreen(
                     onUpdateLanguage = onUpdateLanguage,
                     onUpdateDarkTheme = onUpdateDarkTheme,
                     onUpdateOverlayEnabled = onUpdateOverlayEnabled,
+                    onBack = { subPage = SettingsSubPage.ROOT }
+                )
+            }
+
+            SettingsSubPage.CONFIG_BACKUP -> {
+                ConfigBackupSubScreen(
+                    identitiesCount = identities.size,
+                    bookmarksCount = bookmarksCount,
+                    onExportConfig = onExportConfig,
+                    onImportConfig = onImportConfig,
+                    onShowMessage = onShowMessage,
                     onBack = { subPage = SettingsSubPage.ROOT }
                 )
             }
@@ -376,12 +418,14 @@ fun SettingsScreen(
 private fun SettingsHubRoot(
     settings: AppSettings,
     identities: List<IdentityEntity>,
+    bookmarksCount: Int,
     updateState: UpdateUiState,
     onUpdateDarkTheme: (Boolean) -> Unit,
     onOpenEditNickname: () -> Unit,
     onOpenIdentities: () -> Unit,
     onOpenVoiceDsp: () -> Unit,
     onOpenGeneralAppearance: () -> Unit,
+    onOpenConfigBackup: () -> Unit,
     onOpenAbout: () -> Unit,
     onRequestClearAllData: () -> Unit
 ) {
@@ -499,9 +543,21 @@ private fun SettingsHubRoot(
             }
         }
 
-        // Group 3: About (with Updates + Licenses) & Data Reset (Entries 5 & 6)
+        // Group 3: Config Backup, About (with Updates + Licenses) & Data Reset
         item {
             SettingsSectionCard(title = strings.sectionAboutAndData) {
+                SettingsNavEntryRow(
+                    icon = Icons.Default.Download,
+                    iconBg = colors.emeraldSoft,
+                    iconTint = colors.emerald,
+                    title = strings.configBackupTitle,
+                    subtitle = strings.configBackupSub,
+                    badgeText = "JSON",
+                    onClick = onOpenConfigBackup
+                )
+
+                DashedHorizontalLine(color = colors.border, modifier = Modifier.fillMaxWidth())
+
                 SettingsNavEntryRow(
                     icon = Icons.Default.Info,
                     iconBg = if (hasNewVersion) colors.emeraldSoft else colors.periwinkleSoft,
@@ -530,6 +586,368 @@ private fun SettingsHubRoot(
                     onClick = onRequestClearAllData
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ConfigBackupSubScreen(
+    identitiesCount: Int,
+    bookmarksCount: Int,
+    onExportConfig: (
+        includeIdentities: Boolean,
+        includeBookmarks: Boolean,
+        includeSettings: Boolean,
+        password: String,
+        onReady: (String) -> Unit
+    ) -> Unit,
+    onImportConfig: (
+        rawJson: String,
+        password: String,
+        onComplete: (Boolean) -> Unit
+    ) -> Unit,
+    onShowMessage: (String) -> Unit,
+    onBack: () -> Unit
+) {
+    val colors = AppTheme.colors
+    val strings = AppTheme.strings
+    val isEn = strings.isEnglish
+    val context = LocalContext.current
+
+    var includeIdentities by rememberSaveable { mutableStateOf(true) }
+    var includeBookmarks by rememberSaveable { mutableStateOf(true) }
+    var includeSettings by rememberSaveable { mutableStateOf(true) }
+    var exportPassword by rememberSaveable { mutableStateOf("") }
+    var exportPwdVisible by remember { mutableStateOf(false) }
+
+    var pendingSaveJson by remember { mutableStateOf<String?>(null) }
+    var pendingSaveFileName by remember { mutableStateOf("tscc-config.json") }
+    var pendingEncryptedImportJson by remember { mutableStateOf<String?>(null) }
+    var decryptPassword by remember { mutableStateOf("") }
+    var decryptPwdVisible by remember { mutableStateOf(false) }
+
+    val canExport = includeIdentities || includeBookmarks || includeSettings
+
+    val saveFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        val jsonPayload = pendingSaveJson
+        val name = pendingSaveFileName
+        pendingSaveJson = null
+        if (uri != null && jsonPayload != null) {
+            val ok = runCatching {
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use {
+                    it.write(jsonPayload)
+                } != null
+            }.getOrDefault(false)
+            onShowMessage(
+                if (ok) {
+                    if (isEn) "Exported TSCC config to $name" else "已导出保存 $name"
+                } else {
+                    if (isEn) "Failed to write configuration file" else "写入配置文件失败"
+                }
+            )
+        }
+    }
+
+    val openFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            val raw = runCatching {
+                context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use {
+                    it.readText()
+                }
+            }.getOrNull()
+            if (raw.isNullOrBlank()) {
+                onShowMessage(
+                    if (isEn) "Unable to read selected configuration file" else "无法读取所选配置文件"
+                )
+                return@rememberLauncherForActivityResult
+            }
+            TsccConfigBackupCodec.inspectEnvelope(raw)
+                .onSuccess { env ->
+                    if (env.encrypted) {
+                        decryptPassword = ""
+                        decryptPwdVisible = false
+                        pendingEncryptedImportJson = raw
+                    } else {
+                        onImportConfig(raw, "") {}
+                    }
+                }
+                .onFailure {
+                    onShowMessage(
+                        if (isEn) {
+                            "Invalid TSCC configuration file"
+                        } else {
+                            "不是有效的 TSCC 配置文件"
+                        }
+                    )
+                }
+        }
+    }
+
+    fun buildExportFileName(): String {
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.ROOT).format(Date())
+        return "tscc-config-$stamp.json"
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.canvas),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 26.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            AppScreenHeader(
+                title = strings.configBackupTitle,
+                subtitle = strings.configBackupSub,
+                leading = {
+                    AppCircleIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = strings.back,
+                        onClick = onBack
+                    )
+                }
+            )
+        }
+
+        item {
+            SettingsSectionCard(title = strings.configExportCardTitle) {
+                SettingToggleRow(
+                    title = "${strings.configSectionIdentitiesTitle} (${identitiesCount.coerceAtLeast(1)})",
+                    subtitle = strings.configSectionIdentitiesSub,
+                    checked = includeIdentities,
+                    onCheckedChange = { includeIdentities = it }
+                )
+
+                DashedHorizontalLine(color = colors.border, modifier = Modifier.fillMaxWidth())
+
+                SettingToggleRow(
+                    title = "${strings.configSectionBookmarksTitle} ($bookmarksCount)",
+                    subtitle = strings.configSectionBookmarksSub,
+                    checked = includeBookmarks,
+                    onCheckedChange = { includeBookmarks = it }
+                )
+
+                DashedHorizontalLine(color = colors.border, modifier = Modifier.fillMaxWidth())
+
+                SettingToggleRow(
+                    title = strings.configSectionSettingsTitle,
+                    subtitle = strings.configSectionSettingsSub,
+                    checked = includeSettings,
+                    onCheckedChange = { includeSettings = it }
+                )
+
+                DashedHorizontalLine(color = colors.border, modifier = Modifier.fillMaxWidth())
+
+                AppCapsuleField(
+                    value = exportPassword,
+                    onValueChange = { exportPassword = it },
+                    label = strings.configPasswordOptionalLabel,
+                    placeholder = strings.configPasswordPlaceholder,
+                    leadingIcon = Icons.Default.Lock,
+                    visualTransformation = if (exportPwdVisible) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                    trailing = {
+                        Icon(
+                            imageVector = if (exportPwdVisible) {
+                                Icons.Default.VisibilityOff
+                            } else {
+                                Icons.Default.Visibility
+                            },
+                            contentDescription = if (exportPwdVisible) {
+                                strings.hidePasswordDesc
+                            } else {
+                                strings.showPasswordDesc
+                            },
+                            tint = colors.textSecondary,
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clickable { exportPwdVisible = !exportPwdVisible }
+                        )
+                    }
+                )
+
+                Text(
+                    text = if (exportPassword.isNotEmpty()) {
+                        if (isEn) {
+                            "Password protection enabled. Keep this password safe to restore later."
+                        } else {
+                            "已启用密码加密保护，恢复配置时需输入相同密码。"
+                        }
+                    } else {
+                        if (isEn) {
+                            "Note: Without a password, identity keys and saved passwords are saved unencrypted. Keep the file private."
+                        } else {
+                            "提示：未设置密码时，导出的文件将包含未加密的身份密钥与服务器密码，请妥善保管。"
+                        }
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (exportPassword.isNotEmpty()) colors.emerald else colors.textSecondary
+                )
+
+                AppPrimaryPillButton(
+                    text = strings.configExportSaveBtn,
+                    leadingIcon = Icons.Default.Download,
+                    enabled = canExport,
+                    onClick = {
+                        onExportConfig(
+                            includeIdentities,
+                            includeBookmarks,
+                            includeSettings,
+                            exportPassword
+                        ) { json ->
+                            val fileName = buildExportFileName()
+                            pendingSaveFileName = fileName
+                            pendingSaveJson = json
+                            saveFileLauncher.launch(fileName)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                AppSecondaryPillButton(
+                    text = strings.configExportShareBtn,
+                    leadingIcon = Icons.Default.Share,
+                    onClick = {
+                        if (!canExport) return@AppSecondaryPillButton
+                        onExportConfig(
+                            includeIdentities,
+                            includeBookmarks,
+                            includeSettings,
+                            exportPassword
+                        ) { json ->
+                            runCatching {
+                                val dir = File(context.cacheDir, "exports").apply { mkdirs() }
+                                val outFile = File(dir, buildExportFileName())
+                                outFile.writeText(json, Charsets.UTF_8)
+                                val shareUri = FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.fileprovider",
+                                    outFile
+                                )
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "application/json"
+                                    putExtra(Intent.EXTRA_STREAM, shareUri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(
+                                    Intent.createChooser(
+                                        shareIntent,
+                                        if (isEn) "Share TSCC Config" else "分享 TSCC 配置文件"
+                                    )
+                                )
+                            }.onFailure {
+                                onShowMessage(
+                                    if (isEn) "Unable to open system share menu" else "无法打开系统分享菜单"
+                                )
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .alpha(if (canExport) 1f else 0.45f)
+                )
+            }
+        }
+
+        item {
+            SettingsSectionCard(title = strings.configImportCardTitle) {
+                Text(
+                    text = if (isEn) {
+                        "Select a previously exported .json TSCC backup file. Identities are merged safely (preserving higher security levels), bookmarks & labels automatically relink to matching identities, and preferences are applied immediately."
+                    } else {
+                        "选择此前导出的 TSCC 配置 (.json) 文件即可一键恢复。相同 UID 的身份会自动保留更高安全等级，服务器书签与标签自动重新关联对应身份，设置偏好立即生效。"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textSecondary
+                )
+
+                AppSecondaryPillButton(
+                    text = strings.configImportBtn,
+                    leadingIcon = Icons.Default.FileOpen,
+                    onClick = {
+                        openFileLauncher.launch(
+                            arrayOf("application/json", "application/octet-stream", "*/*")
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+
+    pendingEncryptedImportJson?.let { encryptedRaw ->
+        AppModalDialog(
+            title = if (isEn) "Unlock Encrypted Backup" else "输入备份解密密码",
+            subtitle = if (isEn) {
+                "This configuration file is password-protected. Enter the password set during export."
+            } else {
+                "该配置文件受密码保护，请输入导出时设置的密码"
+            },
+            onDismiss = {
+                pendingEncryptedImportJson = null
+                decryptPassword = ""
+            },
+            confirmText = strings.confirm,
+            confirmEnabled = decryptPassword.isNotEmpty(),
+            onConfirm = {
+                onImportConfig(encryptedRaw, decryptPassword) { ok ->
+                    if (ok) {
+                        pendingEncryptedImportJson = null
+                        decryptPassword = ""
+                    }
+                }
+            }
+        ) {
+            AppCapsuleField(
+                value = decryptPassword,
+                onValueChange = { decryptPassword = it },
+                label = if (isEn) "Decryption Password" else "解密密码",
+                placeholder = if (isEn) "Enter backup password" else "请输入备份密码",
+                leadingIcon = Icons.Default.Lock,
+                visualTransformation = if (decryptPwdVisible) {
+                    VisualTransformation.None
+                } else {
+                    PasswordVisualTransformation()
+                },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        if (decryptPassword.isNotEmpty()) {
+                            onImportConfig(encryptedRaw, decryptPassword) { ok ->
+                                if (ok) {
+                                    pendingEncryptedImportJson = null
+                                    decryptPassword = ""
+                                }
+                            }
+                        }
+                    }
+                ),
+                trailing = {
+                    Icon(
+                        imageVector = if (decryptPwdVisible) {
+                            Icons.Default.VisibilityOff
+                        } else {
+                            Icons.Default.Visibility
+                        },
+                        contentDescription = if (decryptPwdVisible) {
+                            strings.hidePasswordDesc
+                        } else {
+                            strings.showPasswordDesc
+                        },
+                        tint = colors.textSecondary,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clickable { decryptPwdVisible = !decryptPwdVisible }
+                    )
+                }
+            )
         }
     }
 }

@@ -803,6 +803,7 @@ private fun SettingsTabHost(viewModel: MainViewModel) {
     val settings by viewModel.settings.collectAsState()
     val updateState by viewModel.updateState.collectAsState()
     val identities by viewModel.identities.collectAsState()
+    val bookmarks by viewModel.bookmarks.collectAsState()
     val hasMicPermission by viewModel.hasMicPermission.collectAsState()
     val upgradeProgress by viewModel.securityUpgradeProgress.collectAsState()
     val inputLevelDb by viewModel.inputLevelDb.collectAsState()
@@ -812,6 +813,7 @@ private fun SettingsTabHost(viewModel: MainViewModel) {
     SettingsScreen(
         settings = settings,
         identities = identities,
+        bookmarksCount = bookmarks.size,
         hasMicPermission = hasMicPermission,
         updateState = updateState,
         upgradeProgress = upgradeProgress,
@@ -837,6 +839,8 @@ private fun SettingsTabHost(viewModel: MainViewModel) {
         onCancelUpgrade = viewModel::cancelIdentityUpgrade,
         onSetDefaultIdentity = viewModel::setDefaultIdentity,
         onDeleteIdentity = viewModel::deleteIdentity,
+        onExportConfig = viewModel::exportTsccConfig,
+        onImportConfig = viewModel::importTsccConfig,
         onClearAllAppData = viewModel::clearAllAppData,
         onShowMessage = { viewModel.showToast(it) }
     )

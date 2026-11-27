@@ -23,6 +23,9 @@ import com.cloudwhile.tscc.data.model.ToastTone
 import com.cloudwhile.tscc.data.model.UiToastMessage
 import com.cloudwhile.tscc.data.model.VoiceMode
 import com.cloudwhile.tscc.data.model.WatchingStreamState
+import com.cloudwhile.tscc.data.backup.BackupFormatException
+import com.cloudwhile.tscc.data.backup.BackupInvalidPasswordException
+import com.cloudwhile.tscc.data.backup.BackupPasswordRequiredException
 import com.cloudwhile.tscc.data.update.UpdateUiState
 import com.cloudwhile.tscc.data.util.TsccServerUri
 import com.cloudwhile.tscc.data.util.TsccUriParser
@@ -362,6 +365,96 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepo.setOnboardingCompleted(true) }
     }
 
+    fun exportTsccConfig(
+        includeIdentities: Boolean,
+        includeBookmarks: Boolean,
+        includeSettings: Boolean,
+        password: String,
+        onReady: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val en = repository.isEnglish()
+            repository.exportTsccConfig(
+                includeIdentities = includeIdentities,
+                includeBookmarks = includeBookmarks,
+                includeSettings = includeSettings,
+                password = password
+            ).onSuccess { encodedJson ->
+                onReady(encodedJson)
+            }.onFailure { err ->
+                showToast(
+                    if (en) {
+                        "Export failed: ${err.message}"
+                    } else {
+                        "导出配置失败: ${err.message}"
+                    },
+                    ToastTone.ERROR
+                )
+            }
+        }
+    }
+
+    fun importTsccConfig(
+        rawJson: String,
+        password: String = "",
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val en = repository.isEnglish()
+            repository.importTsccConfig(rawJson, password)
+                .onSuccess { summary ->
+                    if (summary.settingsRestored) {
+                        _onboardingDismissedInSession.value = true
+                    }
+                    val nextEn = repository.isEnglish()
+                    val msg = if (nextEn) {
+                        buildList {
+                            if (summary.identitiesCount > 0) add("${summary.identitiesCount} identities")
+                            if (summary.bookmarksCount > 0) add("${summary.bookmarksCount} bookmarks")
+                            if (summary.settingsRestored) add("preferences")
+                        }.joinToString(", ").let { parts ->
+                            if (parts.isEmpty()) "Configuration imported" else "Restored $parts"
+                        }
+                    } else {
+                        buildList {
+                            if (summary.identitiesCount > 0) add("${summary.identitiesCount} 个身份")
+                            if (summary.bookmarksCount > 0) add("${summary.bookmarksCount} 个书签标签")
+                            if (summary.settingsRestored) add("设置偏好")
+                        }.joinToString("、").let { parts ->
+                            if (parts.isEmpty()) "配置已导入" else "已恢复：$parts"
+                        }
+                    }
+                    showToast(msg)
+                    onComplete(true)
+                }
+                .onFailure { err ->
+                    val errMsg = when (err) {
+                        is BackupInvalidPasswordException -> if (en) {
+                            "Incorrect backup decryption password"
+                        } else {
+                            "备份解密密码不正确，请重新输入"
+                        }
+                        is BackupPasswordRequiredException -> if (en) {
+                            "This backup file is password-protected"
+                        } else {
+                            "该备份文件已加密，请输入解密密码"
+                        }
+                        is BackupFormatException -> if (en) {
+                            "Invalid or unsupported configuration file"
+                        } else {
+                            "配置文件格式无效或已损坏"
+                        }
+                        else -> if (en) {
+                            "Unable to import configuration file"
+                        } else {
+                            "无法导入该配置文件"
+                        }
+                    }
+                    showToast(errMsg, ToastTone.ERROR)
+                    onComplete(false)
+                }
+        }
+    }
 
     fun checkForUpdates(manual: Boolean) {
         val curSettings = settings.value

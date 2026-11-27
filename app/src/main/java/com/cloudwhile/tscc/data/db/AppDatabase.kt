@@ -54,6 +54,9 @@ interface BookmarkDao {
     @Query("SELECT * FROM bookmarks ORDER BY lastConnectedAt DESC, id DESC")
     fun observeAll(): Flow<List<BookmarkEntity>>
 
+    @Query("SELECT * FROM bookmarks ORDER BY lastConnectedAt DESC, id ASC")
+    suspend fun getAll(): List<BookmarkEntity>
+
     @Query("SELECT * FROM bookmarks WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): BookmarkEntity?
 
@@ -101,6 +104,9 @@ interface IdentityDao {
 interface UserAudioPrefDao {
     @Query("SELECT * FROM user_audio_prefs")
     fun observeAll(): Flow<List<UserAudioPrefEntity>>
+
+    @Query("SELECT * FROM user_audio_prefs ORDER BY updatedAt DESC")
+    suspend fun getAll(): List<UserAudioPrefEntity>
 
     @Query("SELECT * FROM user_audio_prefs WHERE clientUid = :uid LIMIT 1")
     suspend fun getByUid(uid: String): UserAudioPrefEntity?

@@ -15,6 +15,15 @@
 }
 -keep class com.cloudwhile.tscc.data.model.** { *; }
 
+-keep,includedescriptorclasses class com.cloudwhile.tscc.data.backup.**$$serializer { *; }
+-keepclassmembers class com.cloudwhile.tscc.data.backup.** {
+    *** Companion;
+}
+-keepclasseswithmembers class com.cloudwhile.tscc.data.backup.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-keep class com.cloudwhile.tscc.data.backup.** { *; }
+
 # Room Database Entities
 -keep class * extends androidx.room.RoomDatabase
 -keep class com.cloudwhile.tscc.data.db.** { *; }
