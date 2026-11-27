@@ -930,3 +930,166 @@ pub extern "system" fn Java_com_cloudwhile_tscc_data_NativeBridge_nativeRemoveCl
         .is_ok();
     if ok { JNI_TRUE } else { JNI_FALSE }
 }
+
+#[no_mangle]
+pub extern "system" fn Java_com_cloudwhile_tscc_data_NativeBridge_nativeRequestServerVariables(
+    _env: JNIEnv,
+    _class: JClass,
+) -> jboolean {
+    let Some(ctx) = ENGINE.get() else {
+        return JNI_FALSE;
+    };
+    if ctx.cmd_tx.send(SessionCommand::RequestServerVariables).is_ok() {
+        JNI_TRUE
+    } else {
+        JNI_FALSE
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_cloudwhile_tscc_data_NativeBridge_nativeRequestClientDetails(
+    _env: JNIEnv,
+    _class: JClass,
+    client_id: jint,
+) -> jboolean {
+    let Some(ctx) = ENGINE.get() else {
+        return JNI_FALSE;
+    };
+    if ctx
+        .cmd_tx
+        .send(SessionCommand::RequestClientDetails {
+            client_id: client_id.max(0) as u16,
+        })
+        .is_ok()
+    {
+        JNI_TRUE
+    } else {
+        JNI_FALSE
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_cloudwhile_tscc_data_NativeBridge_nativeUpdateSelfProfile(
+    mut env: JNIEnv,
+    _class: JClass,
+    update_nickname: jboolean,
+    nickname: JString,
+    update_commander: jboolean,
+    is_channel_commander: jboolean,
+) -> jboolean {
+    let Some(ctx) = ENGINE.get() else {
+        return JNI_FALSE;
+    };
+    let nick_opt = if update_nickname == JNI_TRUE {
+        Some(jstr(&mut env, &nickname))
+    } else {
+        None
+    };
+    let cmd_opt = if update_commander == JNI_TRUE {
+        Some(is_channel_commander == JNI_TRUE)
+    } else {
+        None
+    };
+    if ctx
+        .cmd_tx
+        .send(SessionCommand::UpdateSelfProfile {
+            nickname: nick_opt,
+            is_channel_commander: cmd_opt,
+        })
+        .is_ok()
+    {
+        JNI_TRUE
+    } else {
+        JNI_FALSE
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_cloudwhile_tscc_data_NativeBridge_nativeEditClientProperties(
+    mut env: JNIEnv,
+    _class: JClass,
+    client_id: jint,
+    update_description: jboolean,
+    description: JString,
+    update_talk_power_granted: jboolean,
+    talk_power_granted: jboolean,
+) -> jboolean {
+    let Some(ctx) = ENGINE.get() else {
+        return JNI_FALSE;
+    };
+    let desc_opt = if update_description == JNI_TRUE {
+        Some(jstr(&mut env, &description))
+    } else {
+        None
+    };
+    let tp_opt = if update_talk_power_granted == JNI_TRUE {
+        Some(talk_power_granted == JNI_TRUE)
+    } else {
+        None
+    };
+    if ctx
+        .cmd_tx
+        .send(SessionCommand::EditClientProperties {
+            client_id: client_id.max(0) as u16,
+            description: desc_opt,
+            talk_power_granted: tp_opt,
+        })
+        .is_ok()
+    {
+        JNI_TRUE
+    } else {
+        JNI_FALSE
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_cloudwhile_tscc_data_NativeBridge_nativeSetClientServerGroup(
+    _env: JNIEnv,
+    _class: JClass,
+    client_id: jint,
+    server_group_id: jlong,
+    add: jboolean,
+) -> jboolean {
+    let Some(ctx) = ENGINE.get() else {
+        return JNI_FALSE;
+    };
+    if ctx
+        .cmd_tx
+        .send(SessionCommand::SetClientServerGroup {
+            client_id: client_id.max(0) as u16,
+            server_group_id: server_group_id.max(0) as u64,
+            add: add == JNI_TRUE,
+        })
+        .is_ok()
+    {
+        JNI_TRUE
+    } else {
+        JNI_FALSE
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_cloudwhile_tscc_data_NativeBridge_nativeSetClientChannelGroup(
+    _env: JNIEnv,
+    _class: JClass,
+    client_id: jint,
+    channel_id: jlong,
+    channel_group_id: jlong,
+) -> jboolean {
+    let Some(ctx) = ENGINE.get() else {
+        return JNI_FALSE;
+    };
+    if ctx
+        .cmd_tx
+        .send(SessionCommand::SetClientChannelGroup {
+            client_id: client_id.max(0) as u16,
+            channel_id: channel_id.max(0) as u64,
+            channel_group_id: channel_group_id.max(0) as u64,
+        })
+        .is_ok()
+    {
+        JNI_TRUE
+    } else {
+        JNI_FALSE
+    }
+}

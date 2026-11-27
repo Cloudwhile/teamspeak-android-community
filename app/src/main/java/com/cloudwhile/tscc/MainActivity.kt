@@ -714,6 +714,15 @@ private fun RoomTabHost(
         onBanClient = viewModel.repository::banClient,
         onOpenDeepLink = viewModel::handleIncomingDeepLink
     )
+        onRequestServerVariables = viewModel.repository::requestServerVariables,
+        onRequestClientDetails = viewModel.repository::requestClientDetails,
+        onUpdateSelfServerNickname = viewModel.repository::updateSelfServerNickname,
+        onSetSelfChannelCommander = viewModel.repository::setSelfChannelCommander,
+        onEditClientDescription = viewModel.repository::editClientDescription,
+        onSetClientTalkPowerGranted = viewModel.repository::setClientTalkPowerGranted,
+        onSetClientServerGroup = viewModel.repository::setClientServerGroup,
+        onSetClientChannelGroup = viewModel.repository::setClientChannelGroup,
+        onShowMessage = { viewModel.showToast(it) },
 }
 
 @Composable

@@ -290,4 +290,41 @@ object NativeBridge : NativeEventCallback {
         viewerClientId: Int,
         reason: Int
     ): Boolean
+
+    @JvmStatic
+    external fun nativeRequestServerVariables(): Boolean
+
+    @JvmStatic
+    external fun nativeRequestClientDetails(clientId: Int): Boolean
+
+    @JvmStatic
+    external fun nativeUpdateSelfProfile(
+        updateNickname: Boolean,
+        nickname: String,
+        updateCommander: Boolean,
+        isChannelCommander: Boolean
+    ): Boolean
+
+    @JvmStatic
+    external fun nativeEditClientProperties(
+        clientId: Int,
+        updateDescription: Boolean,
+        description: String,
+        updateTalkPowerGranted: Boolean,
+        talkPowerGranted: Boolean
+    ): Boolean
+
+    @JvmStatic
+    external fun nativeSetClientServerGroup(
+        clientId: Int,
+        serverGroupId: Long,
+        add: Boolean
+    ): Boolean
+
+    @JvmStatic
+    external fun nativeSetClientChannelGroup(
+        clientId: Int,
+        channelId: Long,
+        channelGroupId: Long
+    ): Boolean
 }

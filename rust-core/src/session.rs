@@ -14,16 +14,16 @@ use tsclientlib::events::{Event, PropertyId, PropertyValue};
 use tsclientlib::messages::c2s;
 use tsclientlib::prelude::*;
 use tsclientlib::{
-    ChannelId, ChannelType, ClientId, ClientType, Codec, CommandError, Connection,
-    DisconnectOptions, FiletransferHandle, InMessage, MaxClients, MessageHandle, MessageTarget,
-    Reason, StreamItem, TsError,
+    ChannelId, ChannelType, ClientId, ClientType, Codec, CodecEncryptionMode, CommandError,
+    Connection, DisconnectOptions, FiletransferHandle, GroupNamingMode, GroupType, InMessage,
+    MaxClients, MessageHandle, MessageTarget, Reason, ServerGroupId, StreamItem, TsError,
 };
 use tsproto_packets::packets::{AudioData, Direction, Flags, OutCommand, OutPacket, PacketType};
 
 use crate::audio_engine::RealtimeAudioEngine;
 use crate::events::{
-    is_en, ChannelNodeDto, ChatMessageDto, CoreEventEnvelope, IdentityInfoDto, OnlineClientDto,
-    PokeAlertDto, ServerSnapshotDto,
+    is_en, ChannelGroupDto, ChannelNodeDto, ChatMessageDto, CoreEventEnvelope, IdentityInfoDto,
+    OnlineClientDto, PokeAlertDto, ServerGroupDto, ServerSnapshotDto,
 };
 use crate::identity::parse_identity_any;
 use crate::resolver::{invalidate_dns_cache, resolve_teamspeak_server};
@@ -174,6 +174,29 @@ pub enum SessionCommand {
         stream_id: String,
         viewer_client_id: u16,
         reason: i32,
+    },
+    RequestServerVariables,
+    RequestClientDetails {
+        client_id: u16,
+    },
+    UpdateSelfProfile {
+        nickname: Option<String>,
+        is_channel_commander: Option<bool>,
+    },
+    EditClientProperties {
+        client_id: u16,
+        description: Option<String>,
+        talk_power_granted: Option<bool>,
+    },
+    SetClientServerGroup {
+        client_id: u16,
+        server_group_id: u64,
+        add: bool,
+    },
+    SetClientChannelGroup {
+        client_id: u16,
+        channel_id: u64,
+        channel_group_id: u64,
     },
     CancelAutoUpgrade,
     InternalAutoUpgradeFinished {
@@ -512,6 +535,28 @@ async fn handle_command(
             emit_state(event_tx, "DISCONNECTED", Some(reason));
         }
 
+        SessionCommand::DisconnectSync {
+            reason,
+            timeout_ms,
+            done_tx,
+        } => {
+            if let Ok(mut eng) = audio_engine.lock() {
+                eng.reset_playback_queues();
+                eng.set_server_can_send_audio(false);
+            }
+            if let Some(mut sess) = active.take() {
+                if let Some(cancel) = sess.upgrade_cancel.take() {
+                    cancel.store(true, Ordering::SeqCst);
+                }
+                emit_state(event_tx, "DISCONNECTED", Some(reason.clone()));
+                if let Some(con) = sess.con.take() {
+                    let wait = Duration::from_millis(timeout_ms.clamp(50, 1500));
+                    gracefully_close_connection_with_timeout(con, reason, wait).await;
+                }
+            }
+            let _ = done_tx.send(());
+        }
+
         SessionCommand::CancelAutoUpgrade => {
             if let Some(sess) = active.as_ref() {
                 if let Some(ref cancel) = sess.upgrade_cancel {
@@ -535,28 +580,6 @@ async fn handle_command(
                     if dto.security_level > 8 {
                         let _ = event_tx.send(CoreEventEnvelope {
                             kind: "identity_upgraded".to_string(),
-        SessionCommand::DisconnectSync {
-            reason,
-            timeout_ms,
-            done_tx,
-        } => {
-            if let Ok(mut eng) = audio_engine.lock() {
-                eng.reset_playback_queues();
-                eng.set_server_can_send_audio(false);
-            }
-            if let Some(mut sess) = active.take() {
-                if let Some(cancel) = sess.upgrade_cancel.take() {
-                    cancel.store(true, Ordering::SeqCst);
-                }
-                emit_state(event_tx, "DISCONNECTED", Some(reason.clone()));
-                if let Some(con) = sess.con.take() {
-                    let wait = Duration::from_millis(timeout_ms.clamp(50, 1500));
-                    gracefully_close_connection_with_timeout(con, reason, wait).await;
-                }
-            }
-            let _ = done_tx.send(());
-        }
-
                             security_level: Some(dto.security_level),
                             key_offset: Some(dto.key_offset),
                             updated_ini: Some(dto.ini_content),
@@ -1392,6 +1415,188 @@ async fn handle_command(
             let pkt = build_remove_client_from_stream_cmd(&stream_id, viewer_client_id, reason);
             let _ = con.send_raw_command(pkt);
         }
+
+        SessionCommand::RequestServerVariables => {
+            let Some(sess) = active.as_mut() else { return };
+            let Some(con) = sess.con.as_mut() else { return };
+            let pkt_opt = con.get_state().ok().map(|st| st.server.variables());
+            if let Some(pkt) = pkt_opt {
+                let _ = pkt.send(con);
+            }
+        }
+
+        SessionCommand::RequestClientDetails { client_id } => {
+            let Some(sess) = active.as_mut() else { return };
+            let Some(con) = sess.con.as_mut() else { return };
+            let pkts = con.get_state().ok().and_then(|st| {
+                st.clients.get(&ClientId(client_id)).map(|cl| {
+                    (cl.variables().to_packet(), cl.connection_info().to_packet())
+                })
+            });
+            if let Some((var_pkt, conn_pkt)) = pkts {
+                let _ = var_pkt.send(con);
+                let _ = conn_pkt.send(con);
+            }
+        }
+
+        SessionCommand::UpdateSelfProfile {
+            nickname,
+            is_channel_commander,
+        } => {
+            let Some(sess) = active.as_mut() else { return };
+            let Some(con) = sess.con.as_mut() else { return };
+            let mut new_nick_applied: Option<String> = None;
+            let pkt_opt = con.get_state().ok().and_then(|st| {
+                let mut upd = st.client_update();
+                let mut changed = false;
+                if let Some(ref nick) = nickname {
+                    let trimmed = nick.trim();
+                    if !trimmed.is_empty() {
+                        let cur_name = st
+                            .clients
+                            .get(&st.own_client)
+                            .map(|c| c.name.as_str())
+                            .unwrap_or("");
+                        if trimmed != cur_name {
+                            upd = upd.set_name(trimmed);
+                            new_nick_applied = Some(trimmed.to_string());
+                            changed = true;
+                        }
+                    }
+                }
+                if let Some(cc) = is_channel_commander {
+                    upd = upd.set_is_channel_commander(cc);
+                    changed = true;
+                }
+                if changed {
+                    Some(upd.to_packet())
+                } else {
+                    None
+                }
+            });
+            let Some(pkt) = pkt_opt else { return };
+            if let Some(n) = new_nick_applied {
+                sess.my_nickname = n;
+            }
+            let action_label = if nickname.is_some() {
+                if is_en() { "Update nickname" } else { "修改昵称" }
+            } else if is_en() {
+                "Toggle Channel Commander"
+            } else {
+                "切换频道指挥官"
+            };
+            if let Ok(h) = pkt.send_with_result(con) {
+                sess.pending_commands
+                    .insert(h, PendingCmdMeta::simple(action_label, None, false));
+            }
+        }
+
+        SessionCommand::EditClientProperties {
+            client_id,
+            description,
+            talk_power_granted,
+        } => {
+            let Some(sess) = active.as_mut() else { return };
+            let Some(con) = sess.con.as_mut() else { return };
+            let pkt_opt = con.get_state().ok().and_then(|st| {
+                let cl = st.clients.get(&ClientId(client_id))?;
+                let mut ed = cl.edit();
+                let mut changed = false;
+                if let Some(ref desc) = description {
+                    ed = ed.set_description(desc);
+                    changed = true;
+                }
+                if let Some(granted) = talk_power_granted {
+                    ed = ed.set_talk_power_granted(granted);
+                    changed = true;
+                }
+                if changed {
+                    Some(ed.to_packet())
+                } else {
+                    None
+                }
+            });
+            let Some(pkt) = pkt_opt else { return };
+            let action_label = if let Some(granted) = talk_power_granted {
+                if granted {
+                    if is_en() { "Grant talk power" } else { "授予发言权" }
+                } else if is_en() {
+                    "Revoke talk power"
+                } else {
+                    "收回发言权"
+                }
+            } else if is_en() {
+                "Update description"
+            } else {
+                "修改个人简介"
+            };
+            if let Ok(h) = pkt.send_with_result(con) {
+                sess.pending_commands
+                    .insert(h, PendingCmdMeta::simple(action_label, None, false));
+            }
+        }
+
+        SessionCommand::SetClientServerGroup {
+            client_id,
+            server_group_id,
+            add,
+        } => {
+            let Some(sess) = active.as_mut() else { return };
+            let Some(con) = sess.con.as_mut() else { return };
+            let pkt_opt = con.get_state().ok().and_then(|st| {
+                let cl = st.clients.get(&ClientId(client_id))?;
+                if add {
+                    Some(cl.add_server_group(ServerGroupId(server_group_id)))
+                } else {
+                    Some(cl.remove_server_group(ServerGroupId(server_group_id)))
+                }
+            });
+            let Some(pkt) = pkt_opt else { return };
+            let action_label = if add {
+                if is_en() { "Add server group" } else { "添加服务器组" }
+            } else if is_en() {
+                "Remove server group"
+            } else {
+                "移除服务器组"
+            };
+            if let Ok(h) = pkt.send_with_result(con) {
+                sess.pending_commands
+                    .insert(h, PendingCmdMeta::simple(action_label, None, false));
+            }
+        }
+
+        SessionCommand::SetClientChannelGroup {
+            client_id,
+            channel_id,
+            channel_group_id,
+        } => {
+            let Some(sess) = active.as_mut() else { return };
+            let Some(con) = sess.con.as_mut() else { return };
+            let cldbid_opt = con
+                .get_state()
+                .ok()
+                .and_then(|st| st.clients.get(&ClientId(client_id)).map(|c| c.database_id.0));
+            let Some(cldbid) = cldbid_opt else { return };
+            let mut pkt = OutCommand::new(
+                Direction::C2S,
+                Flags::empty(),
+                PacketType::Command,
+                "setclientchannelgroup",
+            );
+            pkt.write_arg("cgid", &channel_group_id);
+            pkt.write_arg("cid", &channel_id);
+            pkt.write_arg("cldbid", &cldbid);
+            if let Ok(h) = con.send_raw_command_with_result(pkt) {
+                sess.pending_commands.insert(
+                    h,
+                    PendingCmdMeta::simple(
+                        if is_en() { "Set channel group" } else { "设置频道组" },
+                        Some(channel_id as i64),
+                        false,
+                    ),
+                );
+            }
+        }
     }
 }
 
@@ -1511,13 +1716,15 @@ fn handle_stream_item(
                         (
                             state.server.set_subscribed(true),
                             state.server.perm_list(),
+                            state.server.variables(),
                             state.server.name.clone(),
                             state.server.welcome_message.clone(),
                         )
                     });
-                    if let Some((sub_pkt, perm_pkt, srv_name, welcome_msg)) = init_info {
+                    if let Some((sub_pkt, perm_pkt, srv_vars_pkt, srv_name, welcome_msg)) = init_info {
                         let _ = sub_pkt.send(con);
                         let _ = perm_pkt.send(con);
+                        let _ = srv_vars_pkt.send(con);
                         let _ = con.send_keepalive_ping();
 
                         if !welcome_msg.is_empty() {
@@ -2071,7 +2278,81 @@ pub fn translate_ts_permission(perm_name: &str) -> &'static str {
         "b_client_use_video" => "开启视频/屏幕共享直播权限",
         "i_video_max_kbps" => "视频直播码率上限权限",
         "i_video_max_streams" => "并发视频直播路数权限",
+        "i_group_member_add_power" | "i_group_needed_member_add_power" => "分配权限组所需权限等级",
+        "i_group_member_remove_power" | "i_group_needed_member_remove_power" => "移除权限组所需权限等级",
+        "b_client_modify_description" => "修改他人简介权限",
+        "b_client_modify_own_description" => "修改个人简介权限",
+        "b_client_use_channel_commander" => "开启频道指挥官权限",
         _ => "服务器管理/操作权限",
+    }
+}
+
+pub fn translate_ts_permission_en(perm_name: &str) -> &'static str {
+    match perm_name {
+        "b_channel_create_permanent" => "Create Permanent Channel",
+        "b_channel_create_semi_permanent" => "Create Semi-Permanent Channel",
+        "b_channel_create_temporary" => "Create Temporary Channel",
+        "b_channel_create_child" => "Create Sub-channel",
+        "b_channel_create_with_password" => "Create Password-Protected Channel",
+        "b_channel_create_with_topic" => "Set Channel Topic",
+        "b_channel_create_with_description" => "Set Channel Description",
+        "b_channel_create_with_maxclients" => "Set Max Clients",
+        "b_channel_create_with_needed_talk_power" => "Set Needed Talk Power",
+        "b_channel_create_with_default" => "Set Default Channel",
+        "b_channel_create_modify_with_codec_opusvoice" => "Use Opus Voice Codec",
+        "b_channel_create_modify_with_codec_opusmusic" => "Use Opus Music Codec",
+        "i_channel_create_modify_with_codec_maxquality" => "Max Codec Quality",
+        "i_channel_join_power" | "i_channel_needed_join_power" => "Channel Join Power",
+        "b_channel_join_permanent" => "Join Permanent Channel",
+        "b_channel_join_semi_permanent" => "Join Semi-Permanent Channel",
+        "b_channel_join_temporary" => "Join Temporary Channel",
+        "b_channel_join_ignore_password" => "Ignore Channel Password",
+        "b_channel_join_ignore_maxclients" => "Ignore Channel Max Clients",
+        "i_channel_modify_power" | "i_channel_needed_modify_power" => "Channel Modify Power",
+        "b_channel_modify_parent" => "Move Channel Parent",
+        "b_channel_modify_name" => "Modify Channel Name",
+        "b_channel_modify_password" => "Modify Channel Password",
+        "b_channel_modify_topic" => "Modify Channel Topic",
+        "b_channel_modify_description" => "Modify Channel Description",
+        "b_channel_modify_codec" => "Modify Channel Codec",
+        "b_channel_modify_codec_quality" => "Modify Codec Quality",
+        "b_channel_modify_maxclients" => "Modify Max Clients",
+        "b_channel_modify_needed_talk_power" => "Modify Needed Talk Power",
+        "b_channel_modify_make_default" => "Make Default Lobby",
+        "b_channel_modify_make_permanent" => "Make Permanent Channel",
+        "b_channel_modify_make_semi_permanent" => "Make Semi-Permanent Channel",
+        "b_channel_modify_make_temporary" => "Make Temporary Channel",
+        "b_channel_delete_permanent" => "Delete Permanent Channel",
+        "b_channel_delete_semi_permanent" => "Delete Semi-Permanent Channel",
+        "b_channel_delete_temporary" => "Delete Temporary Channel",
+        "b_channel_delete_flag_force" => "Force Delete Occupied Channel",
+        "i_channel_delete_power" | "i_channel_needed_delete_power" => "Channel Delete Power",
+        "i_channel_description_view_power" => "View Channel Description",
+        "i_channel_subscribe_power" => "Subscribe Channel Members",
+        "i_client_move_power" | "i_client_needed_move_power" => "Move Member Power",
+        "i_client_kick_from_server_power" | "i_client_needed_kick_from_server_power" => "Kick from Server Power",
+        "i_client_kick_from_channel_power" | "i_client_needed_kick_from_channel_power" => "Kick from Channel Power",
+        "i_client_ban_power" | "i_client_needed_ban_power" => "Ban Member Power",
+        "i_client_poke_power" | "i_client_needed_poke_power" => "Send Poke Power",
+        "i_client_private_textmessage_power" => "Private Message Power",
+        "b_client_channel_textmessage_send" => "Send Channel Text Message",
+        "b_client_server_textmessage_send" => "Send Server Text Message",
+        "b_virtualserver_token_use" => "Redeem Privilege Key",
+        "i_client_talk_power" | "i_client_needed_talk_power" => "Channel Talk Power",
+        "b_client_request_talker" => "Request Talk Power",
+        "b_client_set_flag_talker" => "Grant Member Talk Power",
+        "i_client_whisper_power" | "i_client_needed_whisper_power" => "Whisper / Stream Power",
+        "b_client_ignore_antiflood" => "Ignore Anti-Flood",
+        "b_client_force_push_to_talk" => "Forced Push-To-Talk",
+        "b_client_use_video" => "Start Video / Screen Share",
+        "i_video_max_kbps" => "Max Video Bitrate",
+        "i_video_max_streams" => "Max Concurrent Video Streams",
+        "i_group_member_add_power" | "i_group_needed_member_add_power" => "Assign Group Power",
+        "i_group_member_remove_power" | "i_group_needed_member_remove_power" => "Remove Group Power",
+        "b_client_modify_description" => "Modify Member Description",
+        "b_client_modify_own_description" => "Modify Own Description",
+        "b_client_use_channel_commander" => "Use Channel Commander",
+        _ => "Server Moderation Permission",
     }
 }
 
@@ -2121,8 +2402,9 @@ pub fn format_command_error(
     if is_perm {
         if let Some(ref pname) = perm_name_opt {
             if is_en() {
+                let en_desc = translate_ts_permission_en(pname);
                 return (
-                    format!("{action_desc} denied: insufficient permission (missing `{pname}`)"),
+                    format!("{action_desc} denied: insufficient permission (missing \"{en_desc}\" `{pname}`)"),
                     code,
                     Some(pname.clone()),
                     true,
@@ -2307,9 +2589,12 @@ fn emit_snapshot(
                 st_meta.is_some() || sess.stream_tracker.streaming_clids.contains(&c.id.0);
             OnlineClientDto {
                 id: i32::from(c.id.0),
+                database_id: c.database_id.0 as i64,
                 channel_id: c.channel.0 as i64,
                 uid: uid_str,
                 nickname: c.name.clone(),
+                description: c.description.clone(),
+                country_code: c.country_code.clone(),
                 is_talking: false,
                 input_muted: c.input_muted,
                 output_muted: c.output_muted || c.output_only_muted,
@@ -2318,8 +2603,20 @@ fn emit_snapshot(
                 is_away: c.away_message.is_some(),
                 away_message: c.away_message.clone().unwrap_or_default(),
                 is_channel_commander: c.is_channel_commander,
+                is_priority_speaker: c.is_priority_speaker,
+                is_recording: c.is_recording,
                 talk_power: c.talk_power,
                 talk_power_granted: c.talk_power_granted,
+                talk_power_request_msg: c
+                    .talk_power_request
+                    .as_ref()
+                    .map(|r| r.message.clone())
+                    .unwrap_or_default(),
+                talk_power_request_time: c
+                    .talk_power_request
+                    .as_ref()
+                    .map(|r| r.time.unix_timestamp())
+                    .unwrap_or(0),
                 server_groups: c.server_groups.iter().map(|g| g.0 as i64).collect(),
                 channel_group: c.channel_group.0 as i64,
                 icon_id: i64::from(c.icon.0),
@@ -2327,76 +2624,32 @@ fn emit_snapshot(
                 client_type: match c.client_type {
                     ClientType::Normal => 0,
                     ClientType::Query { .. } => 1,
-pub fn translate_ts_permission_en(perm_name: &str) -> &'static str {
-    match perm_name {
-        "b_channel_create_permanent" => "Create Permanent Channel",
-        "b_channel_create_semi_permanent" => "Create Semi-Permanent Channel",
-        "b_channel_create_temporary" => "Create Temporary Channel",
-        "b_channel_create_child" => "Create Sub-channel",
-        "b_channel_create_with_password" => "Create Password-Protected Channel",
-        "b_channel_create_with_topic" => "Set Channel Topic",
-        "b_channel_create_with_description" => "Set Channel Description",
-        "b_channel_create_with_maxclients" => "Set Max Clients",
-        "b_channel_create_with_needed_talk_power" => "Set Needed Talk Power",
-        "b_channel_create_with_default" => "Set Default Channel",
-        "b_channel_create_modify_with_codec_opusvoice" => "Use Opus Voice Codec",
-        "b_channel_create_modify_with_codec_opusmusic" => "Use Opus Music Codec",
-        "i_channel_create_modify_with_codec_maxquality" => "Max Codec Quality",
-        "i_channel_join_power" | "i_channel_needed_join_power" => "Channel Join Power",
-        "b_channel_join_permanent" => "Join Permanent Channel",
-        "b_channel_join_semi_permanent" => "Join Semi-Permanent Channel",
-        "b_channel_join_temporary" => "Join Temporary Channel",
-        "b_channel_join_ignore_password" => "Ignore Channel Password",
-        "b_channel_join_ignore_maxclients" => "Ignore Channel Max Clients",
-        "i_channel_modify_power" | "i_channel_needed_modify_power" => "Channel Modify Power",
-        "b_channel_modify_parent" => "Move Channel Parent",
-        "b_channel_modify_name" => "Modify Channel Name",
-        "b_channel_modify_password" => "Modify Channel Password",
-        "b_channel_modify_topic" => "Modify Channel Topic",
-        "b_channel_modify_description" => "Modify Channel Description",
-        "b_channel_modify_codec" => "Modify Channel Codec",
-        "b_channel_modify_codec_quality" => "Modify Codec Quality",
-        "b_channel_modify_maxclients" => "Modify Max Clients",
-        "b_channel_modify_needed_talk_power" => "Modify Needed Talk Power",
-        "b_channel_modify_make_default" => "Make Default Lobby",
-        "b_channel_modify_make_permanent" => "Make Permanent Channel",
-        "b_channel_modify_make_semi_permanent" => "Make Semi-Permanent Channel",
-        "b_channel_modify_make_temporary" => "Make Temporary Channel",
-        "b_channel_delete_permanent" => "Delete Permanent Channel",
-        "b_channel_delete_semi_permanent" => "Delete Semi-Permanent Channel",
-        "b_channel_delete_temporary" => "Delete Temporary Channel",
-        "b_channel_delete_flag_force" => "Force Delete Occupied Channel",
-        "i_channel_delete_power" | "i_channel_needed_delete_power" => "Channel Delete Power",
-        "i_channel_description_view_power" => "View Channel Description",
-        "i_channel_subscribe_power" => "Subscribe Channel Members",
-        "i_client_move_power" | "i_client_needed_move_power" => "Move Member Power",
-        "i_client_kick_from_server_power" | "i_client_needed_kick_from_server_power" => "Kick from Server Power",
-        "i_client_kick_from_channel_power" | "i_client_needed_kick_from_channel_power" => "Kick from Channel Power",
-        "i_client_ban_power" | "i_client_needed_ban_power" => "Ban Member Power",
-        "i_client_poke_power" | "i_client_needed_poke_power" => "Send Poke Power",
-        "i_client_private_textmessage_power" => "Private Message Power",
-        "b_client_channel_textmessage_send" => "Send Channel Text Message",
-        "b_client_server_textmessage_send" => "Send Server Text Message",
-        "b_virtualserver_token_use" => "Redeem Privilege Key",
-        "i_client_talk_power" | "i_client_needed_talk_power" => "Channel Talk Power",
-        "b_client_request_talker" => "Request Talk Power",
-        "b_client_set_flag_talker" => "Grant Member Talk Power",
-        "i_client_whisper_power" | "i_client_needed_whisper_power" => "Whisper / Stream Power",
-        "b_client_ignore_antiflood" => "Ignore Anti-Flood",
-        "b_client_force_push_to_talk" => "Forced Push-To-Talk",
-        "b_client_use_video" => "Start Video / Screen Share",
-        "i_video_max_kbps" => "Max Video Bitrate",
-        "i_video_max_streams" => "Max Concurrent Video Streams",
-        "i_group_member_add_power" | "i_group_needed_member_add_power" => "Assign Group Power",
-        "i_group_member_remove_power" | "i_group_needed_member_remove_power" => "Remove Group Power",
-        "b_client_modify_description" => "Modify Member Description",
-        "b_client_modify_own_description" => "Modify Own Description",
-        "b_client_use_channel_commander" => "Use Channel Commander",
-        _ => "Server Moderation Permission",
-    }
-}
-
                 },
+                platform: c
+                    .optional_data
+                    .as_ref()
+                    .map(|d| d.platform.clone())
+                    .unwrap_or_default(),
+                version: c
+                    .optional_data
+                    .as_ref()
+                    .map(|d| d.version.clone())
+                    .unwrap_or_default(),
+                connected_sec: c
+                    .connection_data
+                    .as_ref()
+                    .and_then(|d| d.connected_time.map(|t| t.whole_seconds()))
+                    .unwrap_or(0),
+                idle_sec: c
+                    .connection_data
+                    .as_ref()
+                    .map(|d| d.idle_time.whole_seconds())
+                    .unwrap_or(0),
+                client_ping_ms: c
+                    .connection_data
+                    .as_ref()
+                    .and_then(|d| d.ping.map(|t| t.whole_milliseconds() as i32))
+                    .unwrap_or(0),
                 is_streaming,
                 stream_id: st_meta.map(|m| m.stream_id.clone()).unwrap_or_default(),
                 stream_name: st_meta.map(|m| m.name.clone()).unwrap_or_default(),
@@ -2409,6 +2662,50 @@ pub fn translate_ts_permission_en(perm_name: &str) -> &'static str {
             }
         })
         .collect();
+
+    let mut server_groups: Vec<ServerGroupDto> = book
+        .server_groups
+        .values()
+        .map(|g| ServerGroupDto {
+            id: g.id.0 as i64,
+            name: g.name.clone(),
+            group_type: match g.group_type {
+                GroupType::Template => 0,
+                GroupType::Regular => 1,
+                GroupType::Query => 2,
+            },
+            icon_id: i64::from(g.icon.0),
+            sort_id: g.sort_id,
+            naming_mode: match g.naming_mode {
+                GroupNamingMode::None => 0,
+                GroupNamingMode::Before => 1,
+                GroupNamingMode::After => 2,
+            },
+        })
+        .collect();
+    server_groups.sort_by_key(|g| (if g.sort_id > 0 { 0 } else { 1 }, g.sort_id, g.id));
+
+    let mut channel_groups: Vec<ChannelGroupDto> = book
+        .channel_groups
+        .values()
+        .map(|g| ChannelGroupDto {
+            id: g.id.0 as i64,
+            name: g.name.clone(),
+            group_type: match g.group_type {
+                GroupType::Template => 0,
+                GroupType::Regular => 1,
+                GroupType::Query => 2,
+            },
+            icon_id: i64::from(g.icon.0),
+            sort_id: g.sort_id,
+            naming_mode: match g.naming_mode {
+                GroupNamingMode::None => 0,
+                GroupNamingMode::Before => 1,
+                GroupNamingMode::After => 2,
+            },
+        })
+        .collect();
+    channel_groups.sort_by_key(|g| (if g.sort_id > 0 { 0 } else { 1 }, g.sort_id, g.id));
 
     let channels: Vec<ChannelNodeDto> = book
         .channels
@@ -2434,21 +2731,40 @@ pub fn translate_ts_permission_en(perm_name: &str) -> &'static str {
         eng.update_client_uid_map(uid_map);
     }
 
+    let opt_srv = book.server.optional_data.as_ref();
     let snap = ServerSnapshotDto {
         session_id: sess.session_id,
         server_name: book.server.name.clone(),
         server_address: sess.display_address.clone(),
+        server_uid: book.server.public_key.get_uid(),
         welcome_message: book.server.welcome_message.clone(),
         host_message: book.server.hostmessage.clone(),
+        hostbanner_url: book.server.hostbanner_url.clone(),
+        hostbanner_gfx_url: book.server.hostbanner_gfx_url.clone(),
+        hostbutton_tooltip: book.server.hostbutton_tooltip.clone(),
+        hostbutton_url: book.server.hostbutton_url.clone(),
         platform: book.server.platform.clone(),
         version: book.server.version.clone(),
-                let en_desc = translate_ts_permission_en(pname);
         max_clients: i32::from(book.server.max_clients),
+        reserved_slots: opt_srv.map(|d| i32::from(d.reserved_slots)).unwrap_or(0),
+        uptime_sec: opt_srv.map(|d| d.uptime.whole_seconds()).unwrap_or(0),
+        needed_security_level: opt_srv
+            .map(|d| i32::from(d.needed_identity_security_level))
+            .unwrap_or(0),
+        codec_encryption_mode: match book.server.codec_encryption_mode {
+            CodecEncryptionMode::PerChannel => 0,
+            CodecEncryptionMode::ForcedOff => 1,
+            CodecEncryptionMode::ForcedOn => 2,
+        },
+        default_server_group: book.server.default_server_group.0 as i64,
+        default_channel_group: book.server.default_channel_group.0 as i64,
         my_client_id: i32::from(book.own_client.0),
         my_channel_id,
         server_icon_id: i64::from(book.server.icon.0),
         ping_ms,
         packet_loss_pct: loss_pct,
+        server_groups,
+        channel_groups,
         channels,
         clients,
     };
@@ -2548,7 +2864,6 @@ mod tests {
         assert_eq!(code, 0x030d);
         assert!(msg.contains("密码不正确"));
     }
-}
 
     #[test]
     fn disconnect_sync_acknowledges_completion_promptly() {
@@ -2579,3 +2894,4 @@ mod tests {
         });
         assert!(done_rx.recv_timeout(Duration::from_millis(200)).is_ok());
     }
+}

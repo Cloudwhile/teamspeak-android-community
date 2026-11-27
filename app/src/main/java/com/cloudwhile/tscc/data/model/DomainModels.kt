@@ -146,11 +146,38 @@ fun computeExcludedParentChannelIds(
 }
 
 @Serializable
+data class ServerGroupInfo(
+    val id: Long,
+    val name: String,
+    val groupType: Int = 1, // 0 = Template, 1 = Regular, 2 = Query
+    val iconId: Long = 0L,
+    val sortId: Int = 0,
+    val namingMode: Int = 0 // 0 = None, 1 = Before, 2 = After
+) {
+    val unsignedIconId: Long get() = iconId and 0xFFFFFFFFL
+}
+
+@Serializable
+data class ChannelGroupInfo(
+    val id: Long,
+    val name: String,
+    val groupType: Int = 1,
+    val iconId: Long = 0L,
+    val sortId: Int = 0,
+    val namingMode: Int = 0
+) {
+    val unsignedIconId: Long get() = iconId and 0xFFFFFFFFL
+}
+
+@Serializable
 data class OnlineClient(
     val id: Int,
+    val databaseId: Long = 0L,
     val channelId: Long,
     val uid: String = "",
     val nickname: String,
+    val description: String = "",
+    val countryCode: String = "",
     val isTalking: Boolean = false,
     val inputMuted: Boolean = false,
     val outputMuted: Boolean = false,
@@ -159,13 +186,22 @@ data class OnlineClient(
     val isAway: Boolean = false,
     val awayMessage: String = "",
     val isChannelCommander: Boolean = false,
+    val isPrioritySpeaker: Boolean = false,
+    val isRecording: Boolean = false,
     val talkPower: Int = 0,
     val talkPowerGranted: Boolean = false,
+    val talkPowerRequestMsg: String = "",
+    val talkPowerRequestTime: Long = 0L,
     val serverGroups: List<Long> = emptyList(),
     val channelGroup: Long = 0L,
     val iconId: Long = 0L,
     val avatarFlag: String = "",
     val clientType: Int = 0, // 0 = Normal voice client, 1 = ServerQuery
+    val platform: String = "",
+    val version: String = "",
+    val connectedSec: Long = 0L,
+    val idleSec: Long = 0L,
+    val clientPingMs: Int = 0,
     val isStreaming: Boolean = false,
     val streamId: String = "",
     val streamName: String = "",
@@ -173,7 +209,82 @@ data class OnlineClient(
     val streamAudio: Boolean = false,
     val streamBitrate: Int = 0,
     val streamViewers: Int = 0
-)
+) {
+    val unsignedIconId: Long get() = iconId and 0xFFFFFFFFL
+    val hasTalkPowerRequest: Boolean get() = talkPowerRequestTime > 0L
+}
+
+data class ClientResolvedBadges(
+    val displayName: String,
+    val channelGroup: ChannelGroupInfo?,
+    val serverGroups: List<ServerGroupInfo>,
+    val orderedIconIds: List<Long>
+) {
+    fun inlineIcons(maxVisible: Int = 4): Pair<List<Long>, Int> {
+        if (orderedIconIds.size <= maxVisible) return orderedIconIds to 0
+        return orderedIconIds.take(maxVisible) to (orderedIconIds.size - maxVisible)
+    }
+}
+
+fun OnlineClient.resolveBadges(snapshot: ServerSnapshot): ClientResolvedBadges {
+    val chGroup = snapshot.channelGroups.firstOrNull { it.id == channelGroup }
+    val memberGroupSet = serverGroups.toHashSet()
+    val sortedSrvGroups = snapshot.serverGroups
+        .filter { it.id in memberGroupSet }
+        .sortedWith(
+            compareBy<ServerGroupInfo> { if (it.sortId > 0) 0 else 1 }
+                .thenBy { it.sortId }
+                .thenBy { it.id }
+        )
+
+    val prefixes = buildList {
+        if (chGroup != null && chGroup.namingMode == 1 && chGroup.name.isNotBlank()) {
+            add("[${chGroup.name}]")
+        }
+        sortedSrvGroups.forEach { g ->
+            if (g.namingMode == 1 && g.name.isNotBlank()) {
+                add("[${g.name}]")
+            }
+        }
+    }
+    val suffixes = buildList {
+        sortedSrvGroups.forEach { g ->
+            if (g.namingMode == 2 && g.name.isNotBlank()) {
+                add("[${g.name}]")
+            }
+        }
+        if (chGroup != null && chGroup.namingMode == 2 && chGroup.name.isNotBlank()) {
+            add("[${chGroup.name}]")
+        }
+    }
+
+    val display = buildString {
+        if (prefixes.isNotEmpty()) {
+            append(prefixes.joinToString(" "))
+            append(' ')
+        }
+        append(nickname)
+        if (suffixes.isNotEmpty()) {
+            append(' ')
+            append(suffixes.joinToString(" "))
+        }
+    }
+
+    val icons = buildList {
+        chGroup?.unsignedIconId?.takeIf { it != 0L }?.let { add(it) }
+        sortedSrvGroups.forEach { g ->
+            g.unsignedIconId.takeIf { it != 0L }?.let { add(it) }
+        }
+        unsignedIconId.takeIf { it != 0L }?.let { add(it) }
+    }
+
+    return ClientResolvedBadges(
+        displayName = display,
+        channelGroup = chGroup,
+        serverGroups = sortedSrvGroups,
+        orderedIconIds = icons
+    )
+}
 
 enum class LiveStreamSourceType(val tsType: Int) {
     CAMERA(1),
@@ -277,16 +388,29 @@ data class ServerSnapshot(
     val sessionId: Long = 0L,
     val serverName: String = "",
     val serverAddress: String = "",
+    val serverUid: String = "",
     val welcomeMessage: String = "",
     val hostMessage: String = "",
+    val hostbannerUrl: String = "",
+    val hostbannerGfxUrl: String = "",
+    val hostbuttonTooltip: String = "",
+    val hostbuttonUrl: String = "",
     val platform: String = "",
     val version: String = "",
     val maxClients: Int = 32,
+    val reservedSlots: Int = 0,
+    val uptimeSec: Long = 0L,
+    val neededSecurityLevel: Int = 0,
+    val codecEncryptionMode: Int = 0,
+    val defaultServerGroup: Long = 0L,
+    val defaultChannelGroup: Long = 0L,
     val myClientId: Int = 0,
     val myChannelId: Long = 0L,
     val serverIconId: Long = 0L,
     val pingMs: Int = 0,
     val packetLossPct: Float = 0f,
+    val serverGroups: List<ServerGroupInfo> = emptyList(),
+    val channelGroups: List<ChannelGroupInfo> = emptyList(),
     val channels: List<ChannelNode> = emptyList(),
     val clients: List<OnlineClient> = emptyList()
 )

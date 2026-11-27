@@ -28,6 +28,7 @@ import com.cloudwhile.tscc.data.model.ToastTone
 import com.cloudwhile.tscc.data.model.UiToastMessage
 import com.cloudwhile.tscc.data.model.VoiceMode
 import com.cloudwhile.tscc.data.util.SecretCrypto
+import com.cloudwhile.tscc.data.util.TsIconCodec
 import com.cloudwhile.tscc.service.AudioRouteController
 import com.cloudwhile.tscc.service.SoundCuePlayer
 import com.cloudwhile.tscc.service.SoundCueType
@@ -55,8 +56,8 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.UUID
 import java.util.Locale
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 private fun BookmarkEntity.encrypted(): BookmarkEntity = copy(
@@ -550,7 +551,12 @@ class TsccRepository(
                 val key = env.fileKey
                 val path = env.localPath
                 if (!key.isNullOrBlank() && !path.isNullOrBlank()) {
-                    _iconCachePaths.update { it + (key to path) }
+                    repoScope.launch {
+                        if (key.startsWith("icon_")) {
+                            TsIconCodec.normalizeIconFileInPlace(File(path))
+                        }
+                        _iconCachePaths.update { it + (key to path) }
+                    }
                 }
             }
 
@@ -626,7 +632,7 @@ class TsccRepository(
                     publicKeyBase64 = info.publicKeyBase64,
                     iniPayload = info.iniContent,
                     securityLevel = info.securityLevel,
-                    isDefault = !hasAny
+                    isDefault = shouldBeDefault
                 )
                 val id = db.identityDao().insert(plainEntity.encrypted())
                 plainEntity.copy(id = id)
@@ -891,20 +897,6 @@ class TsccRepository(
         stopVoiceService()
     }
 
-    private fun stopVoiceService() {
-        val stopIntent = Intent(context, VoiceCallService::class.java).apply {
-            action = VoiceCallService.ACTION_STOP_CALL
-        }
-        runCatching { context.startService(stopIntent) }
-            .onFailure { runCatching { context.stopService(Intent(context, VoiceCallService::class.java)) } }
-    }
-
-    // --- Channel Joining & Session Password Cache ---
-
-    fun requestJoinChannel(channel: ChannelNode, explicitPassword: String? = null) {
-        if (channel.id == _serverSnapshot.value.myChannelId) return
-
-        if (explicitPassword != null) {
     /**
      * Synchronously flushes the encrypted `clientdisconnect` UDP packet to the OS socket and waits
      * briefly (up to [timeoutMs]) for the server ACK before process teardown when the user swipes
@@ -950,6 +942,20 @@ class TsccRepository(
             return
         }
 
+    private fun stopVoiceService() {
+        val stopIntent = Intent(context, VoiceCallService::class.java).apply {
+            action = VoiceCallService.ACTION_STOP_CALL
+        }
+        runCatching { context.startService(stopIntent) }
+            .onFailure { runCatching { context.stopService(Intent(context, VoiceCallService::class.java)) } }
+    }
+
+    // --- Channel Joining & Session Password Cache ---
+
+    fun requestJoinChannel(channel: ChannelNode, explicitPassword: String? = null) {
+        if (channel.id == _serverSnapshot.value.myChannelId) return
+
+        if (explicitPassword != null) {
         if (!channel.hasPassword) {
             switchChannel(channel.id, "")
             return
@@ -1363,6 +1369,85 @@ class TsccRepository(
                 setLoopbackTesting(false)
             }
             if (_connectionStatus.value != ConnectionStatus.DISCONNECTED) {
+    fun requestServerVariables() {
+        if (!NativeBridge.ensureLoaded()) return
+        repoScope.launch {
+            NativeBridge.nativeRequestServerVariables()
+        }
+    }
+
+    fun requestClientDetails(clientId: Int) {
+        if (clientId <= 0 || !NativeBridge.ensureLoaded()) return
+        repoScope.launch {
+            NativeBridge.nativeRequestClientDetails(clientId)
+        }
+    }
+
+    fun updateSelfServerNickname(nickname: String) {
+        val clean = nickname.trim()
+        if (clean.isEmpty() || !NativeBridge.ensureLoaded()) return
+        repoScope.launch {
+            NativeBridge.nativeUpdateSelfProfile(
+                updateNickname = true,
+                nickname = clean,
+                updateCommander = false,
+                isChannelCommander = false
+            )
+        }
+    }
+
+    fun setSelfChannelCommander(enabled: Boolean) {
+        if (!NativeBridge.ensureLoaded()) return
+        repoScope.launch {
+            NativeBridge.nativeUpdateSelfProfile(
+                updateNickname = false,
+                nickname = "",
+                updateCommander = true,
+                isChannelCommander = enabled
+            )
+        }
+    }
+
+    fun editClientDescription(clientId: Int, description: String) {
+        if (clientId <= 0 || !NativeBridge.ensureLoaded()) return
+        repoScope.launch {
+            NativeBridge.nativeEditClientProperties(
+                clientId = clientId,
+                updateDescription = true,
+                description = description.trim(),
+                updateTalkPowerGranted = false,
+                talkPowerGranted = false
+            )
+        }
+    }
+
+    fun setClientTalkPowerGranted(clientId: Int, granted: Boolean) {
+        if (clientId <= 0 || !NativeBridge.ensureLoaded()) return
+        repoScope.launch {
+            NativeBridge.nativeEditClientProperties(
+                clientId = clientId,
+                updateDescription = false,
+                description = "",
+                updateTalkPowerGranted = true,
+                talkPowerGranted = granted
+            )
+        }
+    }
+
+    fun setClientServerGroup(clientId: Int, serverGroupId: Long, add: Boolean) {
+        if (clientId <= 0 || serverGroupId <= 0L || !NativeBridge.ensureLoaded()) return
+        repoScope.launch {
+            NativeBridge.nativeSetClientServerGroup(clientId, serverGroupId, add)
+        }
+    }
+
+    fun setClientChannelGroup(clientId: Int, channelId: Long, channelGroupId: Long) {
+        if (clientId <= 0 || channelId <= 0L || channelGroupId <= 0L || !NativeBridge.ensureLoaded()) return
+        repoScope.launch {
+            NativeBridge.nativeSetClientChannelGroup(clientId, channelId, channelGroupId)
+        }
+    }
+
                 disconnect(if (isEnglish()) "Clear app data" else "清除应用数据", manual = true)
             }
             cancelSecurityUpgrade()
@@ -1400,6 +1485,9 @@ class TsccRepository(
             val dest = File(iconDir, "$key.png")
             if (dest.exists() && dest.length() > 0) {
                 if (!_iconCachePaths.value.containsKey(key)) {
+            snap.clients.forEach { if (it.iconId != 0L) add(it.iconId) }
+            snap.serverGroups.forEach { if (it.iconId != 0L) add(it.iconId) }
+            snap.channelGroups.forEach { if (it.iconId != 0L) add(it.iconId) }
                     _iconCachePaths.update { it + (key to dest.absolutePath) }
                 }
             } else if (requestedIconKeys.add(key)) {
@@ -1407,6 +1495,7 @@ class TsccRepository(
             }
         }
 
+                TsIconCodec.normalizeIconFileInPlace(dest)
         for (c in snap.clients) {
             if (c.avatarFlag.isNotBlank() && c.uid.isNotBlank()) {
                 val avatarName = uidToAvatarFileName(c.uid) ?: continue

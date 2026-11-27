@@ -30,11 +30,36 @@ pub struct ChannelNodeDto {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ServerGroupDto {
+    pub id: i64,
+    pub name: String,
+    pub group_type: i32,
+    pub icon_id: i64,
+    pub sort_id: i32,
+    pub naming_mode: i32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChannelGroupDto {
+    pub id: i64,
+    pub name: String,
+    pub group_type: i32,
+    pub icon_id: i64,
+    pub sort_id: i32,
+    pub naming_mode: i32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OnlineClientDto {
     pub id: i32,
+    pub database_id: i64,
     pub channel_id: i64,
     pub uid: String,
     pub nickname: String,
+    pub description: String,
+    pub country_code: String,
     pub is_talking: bool,
     pub input_muted: bool,
     pub output_muted: bool,
@@ -43,13 +68,22 @@ pub struct OnlineClientDto {
     pub is_away: bool,
     pub away_message: String,
     pub is_channel_commander: bool,
+    pub is_priority_speaker: bool,
+    pub is_recording: bool,
     pub talk_power: i32,
     pub talk_power_granted: bool,
+    pub talk_power_request_msg: String,
+    pub talk_power_request_time: i64,
     pub server_groups: Vec<i64>,
     pub channel_group: i64,
     pub icon_id: i64,
     pub avatar_flag: String,
     pub client_type: i32,
+    pub platform: String,
+    pub version: String,
+    pub connected_sec: i64,
+    pub idle_sec: i64,
+    pub client_ping_ms: i32,
     pub is_streaming: bool,
     pub stream_id: String,
     pub stream_name: String,
@@ -92,16 +126,29 @@ pub struct ServerSnapshotDto {
     pub session_id: i64,
     pub server_name: String,
     pub server_address: String,
+    pub server_uid: String,
     pub welcome_message: String,
     pub host_message: String,
+    pub hostbanner_url: String,
+    pub hostbanner_gfx_url: String,
+    pub hostbutton_tooltip: String,
+    pub hostbutton_url: String,
     pub platform: String,
     pub version: String,
     pub max_clients: i32,
+    pub reserved_slots: i32,
+    pub uptime_sec: i64,
+    pub needed_security_level: i32,
+    pub codec_encryption_mode: i32,
+    pub default_server_group: i64,
+    pub default_channel_group: i64,
     pub my_client_id: i32,
     pub my_channel_id: i64,
     pub server_icon_id: i64,
     pub ping_ms: i32,
     pub packet_loss_pct: f32,
+    pub server_groups: Vec<ServerGroupDto>,
+    pub channel_groups: Vec<ChannelGroupDto>,
     pub channels: Vec<ChannelNodeDto>,
     pub clients: Vec<OnlineClientDto>,
 }

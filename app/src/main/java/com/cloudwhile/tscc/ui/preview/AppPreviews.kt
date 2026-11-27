@@ -6,9 +6,11 @@ import com.cloudwhile.tscc.data.AppSettings
 import com.cloudwhile.tscc.data.db.BookmarkEntity
 import com.cloudwhile.tscc.data.db.IdentityEntity
 import com.cloudwhile.tscc.data.model.AudioRoute
+import com.cloudwhile.tscc.data.model.ChannelGroupInfo
 import com.cloudwhile.tscc.data.model.ChannelNode
 import com.cloudwhile.tscc.data.model.ConnectionStatus
 import com.cloudwhile.tscc.data.model.OnlineClient
+import com.cloudwhile.tscc.data.model.ServerGroupInfo
 import com.cloudwhile.tscc.data.model.ServerSnapshot
 import com.cloudwhile.tscc.data.model.VoiceMode
 import com.cloudwhile.tscc.ui.screens.bookmarks.BookmarksScreen
@@ -85,11 +87,23 @@ fun ServerRoomScreenPreview() {
         sessionId = 1,
         serverName = "North Studio · 语音空间",
         myClientId = 10,
+        serverAddress = "voice.studio.cn:9987",
+        welcomeMessage = "欢迎加入 [b]North Studio[/b] 语音空间！",
+        platform = "Linux",
+        version = "3.13.7",
+        uptimeSec = 93_600L,
         myChannelId = 2,
         maxClients = 64,
         pingMs = 24,
         packetLossPct = 0.0f,
         channels = listOf(
+        serverGroups = listOf(
+            ServerGroupInfo(id = 6, name = "Server Admin", iconId = 300, sortId = 10, namingMode = 1),
+            ServerGroupInfo(id = 7, name = "VIP", iconId = 200, sortId = 20)
+        ),
+        channelGroups = listOf(
+            ChannelGroupInfo(id = 5, name = "Channel Admin", iconId = 100, sortId = 10)
+        ),
             ChannelNode(id = 1, parentId = 0, order = 0, name = "公共接待大厅", isDefault = true),
             ChannelNode(
                 id = 2,
@@ -105,9 +119,32 @@ fun ServerRoomScreenPreview() {
             ChannelNode(id = 4, parentId = 0, order = 2, name = "24H 轻音乐电台", codec = 5)
         ),
         clients = listOf(
-            OnlineClient(id = 10, channelId = 2, uid = "me", nickname = "Lin_Studio", talkPower = 25),
-            OnlineClient(id = 11, channelId = 2, uid = "u2", nickname = "阿泽", isTalking = true, talkPower = 50),
-            OnlineClient(id = 12, channelId = 2, uid = "u3", nickname = "Echo", inputMuted = true),
+            OnlineClient(
+                id = 10,
+                channelId = 2,
+                uid = "me",
+                nickname = "Lin_Studio",
+                talkPower = 75,
+                serverGroups = listOf(6, 7),
+                channelGroup = 5
+            ),
+            OnlineClient(
+                id = 11,
+                channelId = 2,
+                uid = "u2",
+                nickname = "阿泽",
+                isTalking = true,
+                talkPower = 50,
+                serverGroups = listOf(7)
+            ),
+            OnlineClient(
+                id = 12,
+                channelId = 2,
+                uid = "u3",
+                nickname = "Echo",
+                inputMuted = true,
+                talkPowerRequestTime = 1700000000L
+            ),
             OnlineClient(id = 13, channelId = 4, uid = "u4", nickname = "MusicBot", isTalking = true)
         )
     )

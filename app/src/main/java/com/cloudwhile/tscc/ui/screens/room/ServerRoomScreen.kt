@@ -62,16 +62,15 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Headset
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.PersonRemove
+import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Speaker
@@ -82,16 +81,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -129,6 +123,7 @@ import com.cloudwhile.tscc.data.model.PasswordEditMode
 import com.cloudwhile.tscc.data.model.ServerSnapshot
 import com.cloudwhile.tscc.data.model.VoiceMode
 import com.cloudwhile.tscc.data.model.WatchingStreamState
+import com.cloudwhile.tscc.data.model.resolveBadges
 import org.webrtc.EglBase
 import org.webrtc.VideoTrack
 import com.cloudwhile.tscc.data.util.BBCodeParser
@@ -266,12 +261,22 @@ fun ServerRoomScreen(
     onMoveClientToChannel: (clientId: Int, targetChannelId: Long) -> Unit,
     onKickClient: (Int, Boolean, String) -> Unit,
     onBanClient: (Int, Long, String) -> Unit,
+    onRequestServerVariables: () -> Unit = {},
+    onRequestClientDetails: (Int) -> Unit = {},
+    onUpdateSelfServerNickname: (String) -> Unit = {},
+    onSetSelfChannelCommander: (Boolean) -> Unit = {},
+    onEditClientDescription: (Int, String) -> Unit = { _, _ -> },
+    onSetClientTalkPowerGranted: (Int, Boolean) -> Unit = { _, _ -> },
+    onSetClientServerGroup: (Int, Long, Boolean) -> Unit = { _, _, _ -> },
+    onSetClientChannelGroup: (Int, Long, Long) -> Unit = { _, _, _ -> },
+    onShowMessage: (String) -> Unit = {},
     onOpenDeepLink: (String) -> Unit
 ) {
     val colors = AppTheme.colors
     val strings = AppTheme.strings
     val context = LocalContext.current
 
+    var showServerInfoSheet by remember { mutableStateOf(false) }
     var showChatSheet by remember { mutableStateOf(false) }
     var showTokenDialog by remember { mutableStateOf(false) }
     var showExitModal by remember { mutableStateOf(false) }
@@ -316,7 +321,6 @@ fun ServerRoomScreen(
 
     // Client / Self management states
     var selectedClientForSheet by remember { mutableStateOf<OnlineClient?>(null) }
-    var showSelfStatusSheet by remember { mutableStateOf(false) }
     var pokeTargetClient by remember { mutableStateOf<OnlineClient?>(null) }
     var kickOrBanTarget by remember { mutableStateOf<Pair<OnlineClient, Boolean>?>(null) }
 
@@ -393,7 +397,7 @@ fun ServerRoomScreen(
                         .fillMaxSize()
                         .background(colors.canvas)
                 ) {
-                    // Top Server Telemetry Header
+                    // Top Server Telemetry Header (tappable to view full Server Info)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
@@ -403,63 +407,86 @@ fun ServerRoomScreen(
                         val serverIconKey = "icon_${snapshot.serverIconId and 0xFFFFFFFFL}"
                         val serverIconFile = iconCachePaths[serverIconKey]
 
-                        Box(
-                            contentAlignment = Alignment.Center,
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .size(42.dp)
-                                .clip(CircleShape)
-                                .background(colors.card)
-                                .border(1.dp, colors.border, CircleShape)
+                                .weight(1f)
+                                .clip(RoundedCornerShape(18.dp))
+                                .pressableScale(0.98f) { showServerInfoSheet = true }
+                                .padding(vertical = 2.dp, horizontal = 2.dp)
                         ) {
-                            if (serverIconFile != null) {
-                                AsyncImage(
-                                    model = File(serverIconFile),
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .size(26.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                )
-                            } else {
-                                Text(
-                                    text = snapshot.serverName.ifBlank { "TS" }.take(1).uppercase(),
-                                    color = colors.periwinkle,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 16.sp
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = snapshot.serverName.ifBlank { strings.tabRoom },
-                                style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
-                                color = colors.textPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Spacer(modifier = Modifier.height(3.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(colors.card)
+                                    .border(1.dp, colors.border, CircleShape)
                             ) {
-                                PulsingEmeraldDot(
-                                    size = 7.dp,
-                                    color = if (snapshot.pingMs < 95) colors.emerald else colors.marigold
-                                )
-                                val lossPct = (snapshot.packetLossPct * 100f).roundToInt()
-                                Text(
-                                    text = if (strings.isEnglish) {
-                                        "${snapshot.pingMs} ms · Loss $lossPct% · $onlineCount/${snapshot.maxClients}"
-                                    } else {
-                                        "${snapshot.pingMs} ms · 丢包 $lossPct% · $onlineCount/${snapshot.maxClients} 在线"
-                                    },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = colors.textSecondary
-                                )
+                                if (serverIconFile != null) {
+                                    AsyncImage(
+                                        model = File(serverIconFile),
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .size(26.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                    )
+                                } else {
+                                    Text(
+                                        text = snapshot.serverName.ifBlank { "TS" }.take(1).uppercase(),
+                                        color = colors.periwinkle,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 16.sp
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Text(
+                                        text = snapshot.serverName.ifBlank { strings.tabRoom },
+                                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                                        color = colors.textPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = if (strings.isEnglish) "Server Info" else "服务器详情",
+                                        tint = colors.periwinkle.copy(alpha = 0.85f),
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    PulsingEmeraldDot(
+                                        size = 7.dp,
+                                        color = if (snapshot.pingMs < 95) colors.emerald else colors.marigold
+                                    )
+                                    val lossPct = (snapshot.packetLossPct * 100f).roundToInt()
+                                    Text(
+                                        text = if (strings.isEnglish) {
+                                            "${snapshot.pingMs} ms · Loss $lossPct% · $onlineCount/${snapshot.maxClients}"
+                                        } else {
+                                            "${snapshot.pingMs} ms · 丢包 $lossPct% · $onlineCount/${snapshot.maxClients} 在线"
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = colors.textSecondary
+                                    )
+                                }
                             }
                         }
+
+                        Spacer(modifier = Modifier.width(8.dp))
 
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             AppCircleIconButton(
@@ -619,8 +646,18 @@ fun ServerRoomScreen(
                                     }
                                     val userPref = userAudioPrefs[c.uid]
                                     val avatarPath = iconCachePaths["avatar_${c.uid}"]
+                                    val resolvedBadges = remember(c, snapshot.serverGroups, snapshot.channelGroups) {
+                                        c.resolveBadges(snapshot)
+                                    }
+                                    val (inlineIcons, overflowCount) = remember(resolvedBadges) {
+                                        resolvedBadges.inlineIcons(maxVisible = 4)
+                                    }
                                     ClientRowView(
                                         client = c,
+                                        displayName = resolvedBadges.displayName,
+                                        inlineIconIds = inlineIcons,
+                                        overflowIconCount = overflowCount,
+                                        iconCachePaths = iconCachePaths,
                                         depth = row.depth,
                                         isMe = isMe,
                                         isSpeaking = isSpeaking,
@@ -630,10 +667,7 @@ fun ServerRoomScreen(
                                         onWatchLive = if (!isMe && c.isStreaming) {
                                             { onWatchPeerStream(c) }
                                         } else null,
-                                        onClick = {
-                                            if (isMe) showSelfStatusSheet = true
-                                            else selectedClientForSheet = c
-                                        }
+                                        onOpenSheet = { selectedClientForSheet = c }
                                     )
                                 }
                             }
@@ -791,30 +825,64 @@ fun ServerRoomScreen(
         )
     }
 
-    if (showSelfStatusSheet) {
-        val me = snapshot.clients.firstOrNull { it.id == snapshot.myClientId }
-        SelfStatusBottomSheet(
-            nickname = me?.nickname.orEmpty(),
-            talkPower = me?.talkPower ?: 0,
-            isAway = isSelfAway || me?.isAway == true,
-            initialAwayMessage = me?.awayMessage.orEmpty(),
-            onDismiss = { showSelfStatusSheet = false },
-            onSetAway = { away, msg ->
-                onSetSelfAway(away, msg)
-                showSelfStatusSheet = false
-            }
+    if (showServerInfoSheet) {
+        ServerInfoBottomSheet(
+            snapshot = snapshot,
+            iconCachePaths = iconCachePaths,
+            onRequestServerVariables = onRequestServerVariables,
+            onCopyText = { label, value, toast ->
+                copyPlainTextToClipboard(context, label, value)
+                onShowMessage(toast)
+            },
+            onClickUrl = { url ->
+                if (url.startsWith("ts3server://", ignoreCase = true) ||
+                    url.startsWith("teamspeak://", ignoreCase = true)
+                ) {
+                    showServerInfoSheet = false
+                    onOpenDeepLink(url)
+                } else {
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    }
+                }
+            },
+            onDismiss = { showServerInfoSheet = false }
         )
     }
 
     selectedClientForSheet?.let { client ->
         val currentPref = userAudioPrefs[client.uid]
-        ClientActionBottomSheet(
-            client = client,
-            allChannels = snapshot.channels,
-            myChannelId = snapshot.myChannelId,
+        MemberDetailAndActionSheet(
+            initialClient = client,
+            snapshot = snapshot,
+            isSelfAway = isSelfAway,
             initialVolumePct = currentPref?.volumePercent ?: 100,
             initialLocalMuted = currentPref?.localMuted ?: false,
-            onDismiss = { selectedClientForSheet = null },
+            iconCachePaths = iconCachePaths,
+            onRequestClientDetails = onRequestClientDetails,
+            onCopyText = { label, value, toast ->
+                copyPlainTextToClipboard(context, label, value)
+                onShowMessage(toast)
+            },
+            onClickUrl = { url ->
+                if (url.startsWith("ts3server://", ignoreCase = true) ||
+                    url.startsWith("teamspeak://", ignoreCase = true)
+                ) {
+                    selectedClientForSheet = null
+                    onOpenDeepLink(url)
+                } else {
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    }
+                }
+            },
+            onSetSelfAway = onSetSelfAway,
+            onUpdateSelfServerNickname = onUpdateSelfServerNickname,
+            onSetSelfChannelCommander = onSetSelfChannelCommander,
+            onEditClientDescription = onEditClientDescription,
+            onSetClientTalkPowerGranted = onSetClientTalkPowerGranted,
+            onSetClientServerGroup = onSetClientServerGroup,
+            onSetClientChannelGroup = onSetClientChannelGroup,
             onVolumeChanged = { vol, muted ->
                 onUpdateUserVolume(client.uid, client.nickname, vol, muted)
             },
@@ -839,17 +907,19 @@ fun ServerRoomScreen(
                 selectedClientForSheet = null
                 kickOrBanTarget = client to true
             },
-            onWatchLive = if (client.isStreaming) {
+            onWatchLive = if (client.id != snapshot.myClientId && client.isStreaming) {
                 {
                     selectedClientForSheet = null
                     onWatchPeerStream(client)
                 }
-            } else null
+            } else null,
+            onDismiss = { selectedClientForSheet = null }
         )
     }
 
     if (showStartStreamSheet) {
-        val meName = snapshot.clients.firstOrNull { it.id == snapshot.myClientId }?.nickname ?: "Me"
+        val meName = snapshot.clients.firstOrNull { it.id == snapshot.myClientId }?.nickname
+            ?: strings.meBadge
         StartTs6BroadcastBottomSheet(
             defaultNickname = meName,
             isEnglish = strings.isEnglish,
@@ -1351,9 +1421,14 @@ private fun ChannelRowView(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ClientRowView(
     client: OnlineClient,
+    displayName: String,
+    inlineIconIds: List<Long>,
+    overflowIconCount: Int,
+    iconCachePaths: Map<String, String>,
     depth: Int,
     isMe: Boolean,
     isSpeaking: Boolean,
@@ -1361,10 +1436,11 @@ private fun ClientRowView(
     localMuted: Boolean,
     avatarPath: String?,
     onWatchLive: (() -> Unit)? = null,
-    onClick: () -> Unit
+    onOpenSheet: () -> Unit
 ) {
     val colors = AppTheme.colors
     val strings = AppTheme.strings
+    val haptics = LocalHapticFeedback.current
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -1385,9 +1461,15 @@ private fun ClientRowView(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .weight(1f)
-                .pressableScale(0.98f, onClick = onClick)
                 .clip(RoundedCornerShape(50))
                 .background(if (isSpeaking) colors.emeraldSoft else Color.Transparent)
+                .combinedClickable(
+                    onClick = onOpenSheet,
+                    onLongClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onOpenSheet()
+                    }
+                )
                 .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
             Box(
@@ -1426,7 +1508,7 @@ private fun ClientRowView(
             Spacer(modifier = Modifier.width(10.dp))
 
             Text(
-                text = client.nickname,
+                text = displayName,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (isSpeaking || isMe) FontWeight.Bold else FontWeight.Medium,
                 color = when {
@@ -1458,6 +1540,17 @@ private fun ClientRowView(
 
             Spacer(modifier = Modifier.weight(1f))
 
+            if (client.hasTalkPowerRequest) {
+                Icon(
+                    imageVector = Icons.Default.PanTool,
+                    contentDescription = if (strings.isEnglish) "Requesting Talk Power" else "申请发言",
+                    tint = colors.marigold,
+                    modifier = Modifier
+                        .padding(end = 5.dp)
+                        .size(14.dp)
+                )
+            }
+
             if (client.isStreaming) {
                 LiveBadgePill(
                     isEnglish = strings.isEnglish,
@@ -1487,6 +1580,37 @@ private fun ClientRowView(
                     color = colors.marigold,
                     modifier = Modifier.padding(end = 6.dp)
                 )
+            }
+
+            if (inlineIconIds.isNotEmpty()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    modifier = Modifier.padding(end = 5.dp)
+                ) {
+                    inlineIconIds.forEach { iconId ->
+                        TsIconBadge(
+                            iconId = iconId,
+                            iconCachePaths = iconCachePaths,
+                            size = 15.dp
+                        )
+                    }
+                    if (overflowIconCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(colors.cardElevated)
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "+$overflowIconCount",
+                                color = colors.textSecondary,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
             }
 
             if (localMuted || client.outputMuted || !client.outputHardware) {
@@ -2117,275 +2241,6 @@ private fun InfoPillChip(text: String, tint: Color, bg: Color) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SelfStatusBottomSheet(
-    nickname: String,
-    talkPower: Int,
-    isAway: Boolean,
-    initialAwayMessage: String,
-    onDismiss: () -> Unit,
-    onSetAway: (Boolean, String) -> Unit
-) {
-    val colors = AppTheme.colors
-    val strings = AppTheme.strings
-    var awayChecked by remember { mutableStateOf(isAway) }
-    var awayMsg by remember { mutableStateOf(initialAwayMessage) }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = colors.card,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 22.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = nickname,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = colors.textPrimary
-                )
-                Text(
-                    text = if (strings.isEnglish) "My Talk Power: $talkPower" else "当前发言权等级：$talkPower",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.textSecondary
-                )
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(colors.cardElevated)
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-            ) {
-                Text(
-                    text = if (strings.isEnglish) "Away Status (AFK)" else "离开状态 (AFK)",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = colors.textPrimary,
-                    modifier = Modifier.weight(1f)
-                )
-                Switch(
-                    checked = awayChecked,
-                    onCheckedChange = { awayChecked = it }
-                )
-            }
-
-            if (awayChecked) {
-                AppCapsuleField(
-                    value = awayMsg,
-                    onValueChange = { awayMsg = it },
-                    label = if (strings.isEnglish) "Away Message" else "离开留言（选填）",
-                    placeholder = if (strings.isEnglish) "e.g. Back in 5 mins" else "例如：接个电话稍回"
-                )
-            }
-
-            AppPrimaryPillButton(
-                text = strings.save,
-                onClick = { onSetAway(awayChecked, awayMsg) },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(modifier = Modifier.height(14.dp))
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ClientActionBottomSheet(
-    client: OnlineClient,
-    allChannels: List<ChannelNode>,
-    myChannelId: Long,
-    initialVolumePct: Int,
-    initialLocalMuted: Boolean,
-    onDismiss: () -> Unit,
-    onVolumeChanged: (Int, Boolean) -> Unit,
-    onSendDm: () -> Unit,
-    onPoke: () -> Unit,
-    onMoveToChannel: (Long) -> Unit,
-    onKick: () -> Unit,
-    onBan: () -> Unit,
-    onWatchLive: (() -> Unit)? = null
-) {
-    val colors = AppTheme.colors
-    val strings = AppTheme.strings
-    var volume by remember(client.uid) { mutableFloatStateOf(initialVolumePct.toFloat()) }
-    var muted by remember(client.uid) { mutableStateOf(initialLocalMuted) }
-    var moveMenuOpen by remember { mutableStateOf(false) }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = colors.card,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 22.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = client.nickname,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = colors.textPrimary
-                )
-                Text(
-                    text = "UID: ${client.uid}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.textSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(colors.cardElevated)
-                    .padding(14.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = if (strings.isEnglish) {
-                            "User Volume: ${volume.roundToInt()}%"
-                        } else {
-                            "独立音量增益：${volume.roundToInt()}%"
-                        },
-                        style = MaterialTheme.typography.titleSmall,
-                        color = colors.textPrimary,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = if (strings.isEnglish) "Mute" else "本地屏蔽",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.textSecondary,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                    Switch(
-                        checked = muted,
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = colors.pillActiveText,
-                            checkedTrackColor = colors.coral
-                        ),
-                        onCheckedChange = {
-                            muted = it
-                            onVolumeChanged(volume.roundToInt(), it)
-                        }
-                    )
-                }
-                Slider(
-                    value = volume,
-                    onValueChange = {
-                        volume = it
-                        onVolumeChanged(it.roundToInt(), muted)
-                    },
-                    valueRange = 0f..200f,
-                    colors = SliderDefaults.colors(
-                        thumbColor = colors.periwinkle,
-                        activeTrackColor = colors.periwinkle
-                    )
-                )
-            }
-
-            if (onWatchLive != null) {
-                AppPrimaryPillButton(
-                    text = if (strings.isEnglish) {
-                        "Watch Live Stream"
-                    } else {
-                        "观看 TA 的直播${client.streamName.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()}"
-                    },
-                    containerColor = Color(0xFFE11D48),
-                    contentColor = Color.White,
-                    onClick = onWatchLive,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                AppPrimaryPillButton(
-                    text = if (strings.isEnglish) "Direct Message" else "发起私聊",
-                    leadingIcon = Icons.AutoMirrored.Filled.Chat,
-                    onClick = onSendDm,
-                    modifier = Modifier.weight(1f)
-                )
-                AppSecondaryPillButton(
-                    text = if (strings.isEnglish) "Poke" else "戳一戳",
-                    leadingIcon = Icons.Default.NotificationsActive,
-                    onClick = onPoke,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Box(modifier = Modifier.weight(1.2f)) {
-                    AppSecondaryPillButton(
-                        text = if (client.channelId != myChannelId) {
-                            if (strings.isEnglish) "Move..." else "移动频道..."
-                        } else {
-                            if (strings.isEnglish) "Move To..." else "移至其他频道..."
-                        },
-                        onClick = { moveMenuOpen = true },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    DropdownMenu(
-                        expanded = moveMenuOpen,
-                        onDismissRequest = { moveMenuOpen = false }
-                    ) {
-                        if (client.channelId != myChannelId) {
-                            DropdownMenuItem(
-                                text = { Text(if (strings.isEnglish) "Pull to My Channel" else "拉到我当前所在频道") },
-                                onClick = {
-                                    moveMenuOpen = false
-                                    onMoveToChannel(myChannelId)
-                                }
-                            )
-                        }
-                        allChannels.filter { it.id != client.channelId }.forEach { targetCh ->
-                            DropdownMenuItem(
-                                text = { Text(targetCh.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                onClick = {
-                                    moveMenuOpen = false
-                                    onMoveToChannel(targetCh.id)
-                                }
-                            )
-                        }
-                    }
-                }
-
-                AppSecondaryPillButton(
-                    text = if (strings.isEnglish) "Kick" else "踢出",
-                    leadingIcon = Icons.Default.PersonRemove,
-                    tint = colors.coral,
-                    onClick = onKick,
-                    modifier = Modifier.weight(1f)
-                )
-                AppSecondaryPillButton(
-                    text = if (strings.isEnglish) "Ban" else "封禁",
-                    leadingIcon = Icons.Default.Gavel,
-                    tint = colors.coral,
-                    onClick = onBan,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
 private fun ChatBottomSheet(
     messages: List<ChatMessage>,
     allClients: List<OnlineClient>,
@@ -2405,7 +2260,8 @@ private fun ChatBottomSheet(
         mutableStateOf(if (activeDmPeer != null) ChatTarget.CLIENT else ChatTarget.CHANNEL)
     }
     var draft by remember { mutableStateOf("") }
-    val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val chatLocale = if (strings.isEnglish) Locale.US else Locale.SIMPLIFIED_CHINESE
+    val timeFmt = remember(chatLocale) { SimpleDateFormat("HH:mm", chatLocale) }
     val listState = rememberLazyListState()
 
     val resolvedDmPeer = remember(activeDmPeer, allClients) {
