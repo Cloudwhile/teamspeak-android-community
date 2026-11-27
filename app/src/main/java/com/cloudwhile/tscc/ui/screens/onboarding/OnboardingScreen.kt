@@ -706,9 +706,9 @@ private fun OnboardingVoicePermStep(
             icon = Icons.Default.TouchApp,
             title = if (isEn) "Push-To-Talk (PTT)" else "按住说话 (PTT)",
             subtitle = if (isEn) {
-                "Hold the room talk bar to transmit — zero accidental background noise"
+                "Hold the talk bar to speak and release to mute"
             } else {
-                "按住房间底部说话条发声，松手立即静音，嘈杂外放环境零误触"
+                "按住房间底部说话条发声，松手立即静音，适合外放或嘈杂环境"
             },
             selected = selectedMode == VoiceMode.PTT,
             onClick = { onSelectVoiceMode(VoiceMode.PTT) }
@@ -727,15 +727,15 @@ private fun OnboardingVoicePermStep(
     }
 
     OnboardingCard(
-        title = if (isEn) "Recommended Permissions" else "通话与后台保活权限"
+        title = if (isEn) "Audio & Notification Permissions" else "通话与通知权限"
     ) {
         PermStatusItem(
             icon = Icons.Default.Mic,
             title = if (isEn) "Microphone Access" else "麦克风录音权限",
             subtitle = if (isEn) {
-                "Required for voice transmission (optional if you only want to listen)"
+                "Required for speaking and mic self-test (you can still listen without it)"
             } else {
-                "用于语音频道发言与回路自检（不授予仍可以纯听众身份进房收听）"
+                "用于语音频道发言与麦克风自检（未授权时仍可进房收听）"
             },
             granted = hasMicPermission
         )
@@ -754,11 +754,11 @@ private fun OnboardingVoicePermStep(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             PermStatusItem(
                 icon = Icons.Default.NotificationsActive,
-                title = if (isEn) "Foreground Call Notification" else "后台通话常驻通知",
+                title = if (isEn) "Active Call Notification" else "通话状态通知",
                 subtitle = if (isEn) {
-                    "Keeps voice call alive in background and shows quick mute controls"
+                    "Keeps voice calls connected in the background with quick mute controls"
                 } else {
-                    "切换至游戏或锁屏时保持语音不断线，并提供通知栏快捷闭麦"
+                    "切换至后台或锁屏时保持语音通话，支持通知栏快捷闭麦"
                 },
                 granted = hasNotifPermission
             )

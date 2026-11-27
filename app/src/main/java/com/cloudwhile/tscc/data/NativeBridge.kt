@@ -65,7 +65,7 @@ object NativeBridge : NativeEventCallback {
     }
 
     private fun nativeNotLoadedMessage(): String =
-        if (isEnglishLang) "Native protocol library is not loaded" else "原生协议库尚未加载"
+        if (isEnglishLang) "Voice engine is not ready" else "语音核心组件尚未就绪"
 
     fun generateIdentity(): Result<IdentityInfo> = runCatching {
         check(ensureLoaded()) { nativeNotLoadedMessage() }

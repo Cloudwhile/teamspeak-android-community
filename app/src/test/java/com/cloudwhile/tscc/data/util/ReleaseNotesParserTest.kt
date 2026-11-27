@@ -86,7 +86,7 @@ class ReleaseNotesParserTest {
     }
 
     @Test
-    fun alpha2CuratedChangelogsFollowNormativeEnglishAndBilingualSpec() {
+    fun alpha2ChangelogsFormatAndBilingualCheck() {
         val rootDir = File("..").canonicalFile.takeIf { File(it, "changelogs").exists() }
             ?: File(".").canonicalFile
 

@@ -184,8 +184,8 @@ private val OPEN_SOURCE_COMPONENTS = listOf(
     OpenSourceComponentItem(
         name = "Kotlin Coroutines & Kotlinx Serialization",
         license = "Apache-2.0",
-        summaryZh = "结构化并发协程调度与零反射 JSON 数据序列化框架",
-        summaryEn = "Structured concurrency coroutines & reflectionless JSON serialization",
+        summaryZh = "Kotlin 协程并发与 JSON 数据序列化支持",
+        summaryEn = "Kotlin coroutines & JSON data serialization",
         url = "https://github.com/Kotlin/kotlinx.coroutines"
     ),
     OpenSourceComponentItem(
@@ -1554,9 +1554,9 @@ private fun AboutAppSubScreen(
                 SettingToggleRow(
                     title = if (isEn) "Auto-Check Updates on Startup" else "启动时自动检查更新",
                     subtitle = if (isEn) {
-                        "Prompt when a newer release or pre-release is published on GitHub"
+                        "Check for new versions automatically when opening the app"
                     } else {
-                        "打开应用时后台静默检测新版本并提示匹配本机架构安装"
+                        "启动应用时自动检查新版本并提示更新"
                     },
                     checked = settings.autoCheckUpdates,
                     onCheckedChange = onUpdateAutoCheckUpdates
@@ -1791,9 +1791,9 @@ private fun LiveVoiceLevelMeter(
             ) {
                 Text(
                     text = if (isVoiceTransmitting) {
-                        if (isEnglish) "● Transmitting" else "● 已触发发送"
+                        if (isEnglish) "● Speaking" else "● 正在发声"
                     } else {
-                        if (isEnglish) "Gated" else "静音门控中"
+                        if (isEnglish) "Standby" else "待机中"
                     },
                     color = if (isVoiceTransmitting) colors.emerald else colors.textSecondary,
                     fontSize = 10.sp,

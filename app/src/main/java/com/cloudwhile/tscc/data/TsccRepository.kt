@@ -800,9 +800,9 @@ class TsccRepository(
         if (!NativeBridge.ensureLoaded()) {
             _connectionStatus.value = ConnectionStatus.ERROR
             _statusMessage.value = if (en) {
-                "Failed to load native TS protocol engine (libtscc_core.so)"
+                "Failed to load voice engine. Please reinstall the application."
             } else {
-                "未能加载原生 TS 协议引擎 (libtscc_core.so)"
+                "语音核心组件加载失败，请重新安装应用"
             }
             return
         }
@@ -880,7 +880,7 @@ class TsccRepository(
         } else {
             _activeBookmarkId.value = null
             _connectionStatus.value = ConnectionStatus.ERROR
-            _statusMessage.value = if (en) "Failed to dispatch connection request" else "启动连接请求失败"
+            _statusMessage.value = if (en) "Unable to start server connection" else "无法发起服务器连接"
         }
     }
 

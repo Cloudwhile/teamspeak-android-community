@@ -205,7 +205,7 @@ private fun MainAppShell(viewModel: MainViewModel) {
         if (viewModel.updateManager.canRequestPackageInstalls()) {
             if (!viewModel.updateManager.launchInstallerForReadyApk()) {
                 viewModel.showToast(
-                    if (strings.isEnglish) "Unable to launch system APK installer" else "无法唤起系统安装包安装程序",
+                    if (strings.isEnglish) "Unable to open system package installer" else "无法打开系统安装程序",
                     ToastTone.ERROR
                 )
             }
@@ -488,9 +488,9 @@ private fun MainAppShell(viewModel: MainViewModel) {
         AppModalDialog(
             title = if (strings.isEnglish) "Microphone Permission Required" else "需要开启麦克风权限",
             subtitle = if (strings.isEnglish) {
-                "System microphone permission was previously denied and blocked from prompting again."
+                "Microphone access is disabled with \"Don't ask again\". Please enable it in system settings."
             } else {
-                "系统已禁止再次弹出麦克风授权询问，当前麦克风发言与语音回路自检功能不可用。"
+                "麦克风权限已被设为不再询问，请在系统设置中手动开启后使用。"
             },
             onDismiss = { showManualMicSettingsDialog = false },
             confirmText = if (strings.isEnglish) "Open Settings" else "前往系统设置开启",

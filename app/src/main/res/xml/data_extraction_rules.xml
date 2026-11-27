@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
-    <!-- Allowlist mode: only UI preferences in files/datastore/ are extracted; databases & keys are excluded -->
+    <!-- Back up UI preferences only; exclude local databases and identity keys -->
     <cloud-backup>
         <include domain="file" path="datastore/" />
     </cloud-backup>

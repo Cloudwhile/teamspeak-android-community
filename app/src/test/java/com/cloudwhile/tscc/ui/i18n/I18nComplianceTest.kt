@@ -76,7 +76,7 @@ class I18nComplianceTest {
     }
 
     @Test
-    fun englishPluralizationAndDefaultIdentityLocalizationFollowSpec() {
+    fun englishPluralizationAndDefaultIdentityLocalization() {
         assertTrue(EnAppStrings.identityManageSub("Main", 8, 1).contains("1 key saved"))
         assertFalse(EnAppStrings.identityManageSub("Main", 8, 1).contains("1 keys"))
         assertTrue(EnAppStrings.identityManageSub("Main", 8, 2).contains("2 keys saved"))

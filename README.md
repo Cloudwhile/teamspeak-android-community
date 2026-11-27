@@ -32,15 +32,15 @@
 
 - **Native TS3 & TS6 Encrypted Protocol Support**
   - Powered by a Rust protocol and state engine (`tsclientlib` / `tsproto`), supporting `initivexpand2` handshakes and encrypted voice transport with TeamSpeak 3 (3.13+) and TeamSpeak 6 community servers.
-  - Full `_ts3._udp` SRV, `_tsdns._tcp` TSDNS, and dual-stack IPv4/IPv6 resolution, plus `ts3server://` and `teamspeak://` deep-link handling.
-- **Desktop Identity Interoperability & Hardware-Backed Encryption**
-  - Generate P-256 ECC identities, import/export desktop `.ini` identity files, and run multi-core parallel SHA-1 security level upgrades (with pause/cancel progress preservation).
-  - Sensitive database columns (identity private keys and saved server/channel passwords) are encrypted at rest via Android Keystore `AES-256-GCM`, and cloud/device-transfer backup rules allowlist UI preferences only.
+  - Full `_ts3._udp` SRV, `_tsdns._tcp` TSDNS, and dual-stack IPv4/IPv6 resolution, plus `tscc://` invite deep-link and share-to-join handling.
+- **Desktop Identity Interoperability, TSCC Config Backup & Hardware-Backed Encryption**
+  - Generate P-256 ECC identities, import/export desktop `.ini` identity files, export/restore portable `.json` TSCC configurations (identities, bookmarks/labels, and preferences with optional `PBKDF2-HMAC-SHA256` + `AES-256-GCM` encryption), and run multi-core parallel SHA-1 security level upgrades (with pause/cancel progress preservation).
+  - Sensitive database columns (identity private keys and saved server/channel passwords) are encrypted at rest via Android Keystore `AES-256-GCM`, and Android Auto Backup excludes private keys and saved passwords.
 - **48,000 Hz Opus Real-Time Audio & Acoustic DSP**
   - Zero-copy `DirectByteBuffer` JNI pipeline (20 ms frames) with automatic `Opus Voice` and `Opus Music` channel codec adaptation.
-  - Built-in 110 Hz 2nd-order Butterworth anti-plosive filter, transient peak limiter, soft-knee multi-speaker mixer, and per-member `0%–200%` volume memory.
+  - Built-in 110 Hz 2nd-order Butterworth anti-plosive filter, transient peak limiter, dynamic multi-speaker mixer, and per-member `0%–200%` volume memory.
   - Voice Activity Detection (VAD), Push-To-Talk (PTT), Continuous transmission, local Opus loopback self-test, automatic Bluetooth/Wired/Speaker/Earpiece hot-plug routing, and phone-call audio focus recovery.
-  - **Graceful Listen-Only Fallback**: Denying microphone permission keeps background playback active without crashing, disables microphone controls across the UI, and guides permission grant on tap.
+  - **Listen-Only Mode**: Joining without microphone permission keeps channel audio playback active while disabling microphone controls until permission is granted.
 - **Channel Management, Text Chat & TS6 Live Streaming (Experimental Alpha)**
   - Sub-channel creation, differential editing, deletion, on-demand BBCode channel descriptions, privilege key redemption, channel/server/direct messaging, and experimental Alpha TS6 WebRTC screen/camera streaming.
 - **Built-in Auto-Updater**
