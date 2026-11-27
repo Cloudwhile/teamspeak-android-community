@@ -1,0 +1,91 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="288"
+    android:viewportHeight="288">
+
+    <!-- Centered rounded-squircle badge inside Android 12+ SplashScreen safe zone (transparent outer area prevents square flash) -->
+    <path android:pathData="M123,96 L165,96 A27,27 0 0,1 192,123 L192,165 A27,27 0 0,1 165,192 L123,192 A27,27 0 0,1 96,165 L96,123 A27,27 0 0,1 123,96 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="102"
+                android:startY="100"
+                android:endX="186"
+                android:endY="188"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#4F9CF9" />
+                <item android:offset="0.52" android:color="#2563EB" />
+                <item android:offset="1.0" android:color="#1E40AF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Subtle top-left ambient highlight -->
+    <path android:pathData="M123,96 L165,96 A27,27 0 0,1 192,123 L192,165 A27,27 0 0,1 165,192 L123,192 A27,27 0 0,1 96,165 L96,123 A27,27 0 0,1 123,96 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="118"
+                android:centerY="114"
+                android:gradientRadius="62"
+                android:type="radial">
+                <item android:offset="0.0" android:color="#3893C5FD" />
+                <item android:offset="1.0" android:color="#0093C5FD" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Crisp subtle glass rim -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#28FFFFFF"
+        android:strokeWidth="1.2"
+        android:pathData="M123,96.6 L165,96.6 A26.4,26.4 0 0,1 191.4,123 L191.4,165 A26.4,26.4 0 0,1 165,191.4 L123,191.4 A26.4,26.4 0 0,1 96.6,165 L96.6,123 A26.4,26.4 0 0,1 123,96.6 Z" />
+
+    <!-- Headset glyph & 3-capsule voice equalizer scaled cleanly around (144, 144) -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:translateX="90"
+        android:translateY="88"
+        android:scaleX="1.15"
+        android:scaleY="1.15">
+
+        <group android:translateY="2.0">
+            <path
+                android:fillColor="#00000000"
+                android:strokeColor="#280F172A"
+                android:strokeWidth="5.6"
+                android:strokeLineCap="round"
+                android:pathData="M34,56 A20,20 0 0,1 74,56" />
+            <path
+                android:fillColor="#280F172A"
+                android:pathData="M34,52 A4.5,4.5 0 0,1 38.5,56.5 L38.5,67.5 A4.5,4.5 0 0,1 29.5,67.5 L29.5,56.5 A4.5,4.5 0 0,1 34,52 Z" />
+            <path
+                android:fillColor="#280F172A"
+                android:pathData="M74,52 A4.5,4.5 0 0,1 78.5,56.5 L78.5,67.5 A4.5,4.5 0 0,1 69.5,67.5 L69.5,56.5 A4.5,4.5 0 0,1 74,52 Z" />
+        </group>
+
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="5.6"
+            android:strokeLineCap="round"
+            android:pathData="M34,56 A20,20 0 0,1 74,56" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M34,52 A4.5,4.5 0 0,1 38.5,56.5 L38.5,67.5 A4.5,4.5 0 0,1 29.5,67.5 L29.5,56.5 A4.5,4.5 0 0,1 34,52 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M74,52 A4.5,4.5 0 0,1 78.5,56.5 L78.5,67.5 A4.5,4.5 0 0,1 69.5,67.5 L69.5,56.5 A4.5,4.5 0 0,1 74,52 Z" />
+        <path
+            android:fillColor="#DCEBFF"
+            android:pathData="M47.5,56 A2,2 0 0,1 49.5,58 L49.5,64 A2,2 0 0,1 45.5,64 L45.5,58 A2,2 0 0,1 47.5,56 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M54,51 A2,2 0 0,1 56,53 L56,69 A2,2 0 0,1 52,69 L52,53 A2,2 0 0,1 54,51 Z" />
+        <path
+            android:fillColor="#DCEBFF"
+            android:pathData="M60.5,56 A2,2 0 0,1 62.5,58 L62.5,64 A2,2 0 0,1 58.5,64 L58.5,58 A2,2 0 0,1 60.5,56 Z" />
+    </group>
+</vector>
