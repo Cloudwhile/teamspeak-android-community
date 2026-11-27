@@ -5,11 +5,14 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.content.FileProvider
 import com.cloudwhile.tscc.BuildConfig
+import com.cloudwhile.tscc.data.util.ReleaseNotesParser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,12 +47,26 @@ data class ReleaseUpdateInfo(
     val versionName: String,
     val releaseName: String,
     val body: String,
+    val bodyEn: String = body,
+    val bodyZh: String = "",
     val htmlUrl: String,
     val publishedAt: String,
     val isPrerelease: Boolean,
     val selectedAsset: ReleaseAssetInfo?,
     val sha256SumsUrl: String?
-)
+) {
+    val hasBilingualNotes: Boolean
+        get() = bodyEn.isNotBlank() && bodyZh.isNotBlank()
+
+    fun localizedNotes(isEnglish: Boolean): String {
+        val raw = if (isEnglish) {
+            bodyEn.ifBlank { body }
+        } else {
+            bodyZh.ifBlank { bodyEn }.ifBlank { body }
+        }
+        return ReleaseNotesParser.cleanMarkdownBody(raw)
+    }
+}
 
 enum class UpdateStatus {
     IDLE,
@@ -80,6 +97,10 @@ class AppUpdateManager(private val context: Context) {
             "https://api.github.com/repos/Cloudwhile/teamspeak-android-community/releases?per_page=15"
         const val RELEASES_WEB_URL =
             "https://github.com/Cloudwhile/teamspeak-android-community/releases"
+        private const val RAW_REPO_BASE_URL =
+            "https://raw.githubusercontent.com/Cloudwhile/teamspeak-android-community"
+        private const val ASSET_NOTES_EN = "RELEASE_NOTES.en.md"
+        private const val ASSET_NOTES_ZH = "RELEASE_NOTES.zh-CN.md"
 
         private val json = Json {
             ignoreUnknownKeys = true
@@ -274,6 +295,13 @@ class AppUpdateManager(private val context: Context) {
     ) {
         if (_state.value.status == UpdateStatus.DOWNLOADING) {
             if (manual) _state.update { it.copy(showDialog = true) }
+            return
+        }
+        if (manual &&
+            _state.value.latestRelease != null &&
+            (_state.value.status == UpdateStatus.AVAILABLE || _state.value.status == UpdateStatus.READY_TO_INSTALL)
+        ) {
+            _state.update { it.copy(showDialog = true) }
             return
         }
         checkJob?.cancel()
@@ -500,10 +528,16 @@ class AppUpdateManager(private val context: Context) {
         return if (f.length() > 0L) f else null
     }
 
-    private fun fetchLatestRelease(isEnglish: Boolean): Result<ReleaseUpdateInfo?> = runCatching {
+    private suspend fun fetchLatestRelease(isEnglish: Boolean): Result<ReleaseUpdateInfo?> = runCatching {
         val rawJson = httpGetText(RELEASES_API_URL, isEnglish)
         val arr = json.parseToJsonElement(rawJson) as? JsonArray ?: return@runCatching null
         val supportedAbis = Build.SUPPORTED_ABIS?.toList().orEmpty()
+
+        data class ParsedCandidate(
+            val info: ReleaseUpdateInfo,
+            val notesEnAssetUrl: String?,
+            val notesZhAssetUrl: String?
+        )
 
         val candidates = arr.mapNotNull { elem ->
             val obj = elem as? JsonObject ?: return@mapNotNull null
@@ -521,31 +555,93 @@ class AppUpdateManager(private val context: Context) {
 
             val assetsJson = obj["assets"] as? JsonArray ?: JsonArray(emptyList())
             var sha256Url: String? = null
+            var notesEnUrl: String? = null
+            var notesZhUrl: String? = null
             val parsedAssets = assetsJson.mapNotNull { aElem ->
                 val aObj = aElem.jsonObject
                 val name = aObj["name"]?.jsonPrimitive?.content?.trim().orEmpty()
                 val url = aObj["browser_download_url"]?.jsonPrimitive?.content?.trim().orEmpty()
                 val size = aObj["size"]?.jsonPrimitive?.longOrNull ?: 0L
-                if (name.equals("SHA256SUMS.txt", ignoreCase = true) && url.isNotBlank()) {
-                    sha256Url = url
+                when {
+                    name.equals("SHA256SUMS.txt", ignoreCase = true) && url.isNotBlank() -> sha256Url = url
+                    name.equals(ASSET_NOTES_EN, ignoreCase = true) && url.isNotBlank() -> notesEnUrl = url
+                    name.equals(ASSET_NOTES_ZH, ignoreCase = true) && url.isNotBlank() -> notesZhUrl = url
                 }
                 if (name.isNotEmpty() && url.isNotBlank()) Triple(name, url, size) else null
             }
 
-            ReleaseUpdateInfo(
-                tagName = tag,
-                versionName = versionName,
-                releaseName = releaseName,
-                body = body,
-                htmlUrl = htmlUrl,
-                publishedAt = publishedAt,
-                isPrerelease = isPrerelease,
-                selectedAsset = selectBestApkAsset(parsedAssets, supportedAbis),
-                sha256SumsUrl = sha256Url
+            val (embeddedEn, embeddedZh) = ReleaseNotesParser.extractEmbeddedNotes(body)
+            val cleanedBody = ReleaseNotesParser.cleanMarkdownBody(body)
+
+            ParsedCandidate(
+                info = ReleaseUpdateInfo(
+                    tagName = tag,
+                    versionName = versionName,
+                    releaseName = releaseName,
+                    body = cleanedBody,
+                    bodyEn = embeddedEn ?: cleanedBody,
+                    bodyZh = embeddedZh.orEmpty(),
+                    htmlUrl = htmlUrl,
+                    publishedAt = publishedAt,
+                    isPrerelease = isPrerelease,
+                    selectedAsset = selectBestApkAsset(parsedAssets, supportedAbis),
+                    sha256SumsUrl = sha256Url
+                ),
+                notesEnAssetUrl = notesEnUrl,
+                notesZhAssetUrl = notesZhUrl
             )
         }
 
-        candidates.maxWithOrNull { a, b -> compareVersions(a.versionName, b.versionName) }
+        val winner = candidates.maxWithOrNull { a, b ->
+            compareVersions(a.info.versionName, b.info.versionName)
+        } ?: return@runCatching null
+
+        if (compareVersions(winner.info.versionName, BuildConfig.VERSION_NAME) <= 0) {
+            return@runCatching winner.info
+        }
+
+        coroutineScope {
+            val tag = winner.info.tagName
+            val enDeferred = async {
+                fetchOptionalMarkdown(
+                    primaryUrl = winner.notesEnAssetUrl,
+                    fallbackUrl = "$RAW_REPO_BASE_URL/$tag/changelogs/$tag.md",
+                    isEnglish = isEnglish
+                )
+            }
+            val zhDeferred = async {
+                fetchOptionalMarkdown(
+                    primaryUrl = winner.notesZhAssetUrl,
+                    fallbackUrl = "$RAW_REPO_BASE_URL/$tag/locales/changelogs/$tag.zh-CN.md",
+                    isEnglish = isEnglish
+                )
+            }
+            val resolvedEn = enDeferred.await()?.takeIf { it.isNotBlank() } ?: winner.info.bodyEn
+            val resolvedZh = zhDeferred.await()?.takeIf { it.isNotBlank() } ?: winner.info.bodyZh
+            winner.info.copy(
+                bodyEn = resolvedEn,
+                bodyZh = resolvedZh
+            )
+        }
+    }
+
+    private fun fetchOptionalMarkdown(
+        primaryUrl: String?,
+        fallbackUrl: String,
+        isEnglish: Boolean
+    ): String? {
+        for (candidate in listOfNotNull(primaryUrl, fallbackUrl)) {
+            val text = runCatching {
+                httpGetText(
+                    urlString = candidate,
+                    isEnglish = isEnglish,
+                    accept = "text/plain, text/markdown, */*",
+                    timeoutMs = 8_000
+                )
+            }.getOrNull()?.let { ReleaseNotesParser.cleanMarkdownBody(it) }
+            if (!text.isNullOrBlank()) return text
+        }
+        return null
     }
 
     private suspend fun downloadAndVerifyApk(
@@ -665,11 +761,18 @@ class AppUpdateManager(private val context: Context) {
         return formatBytesHexLower(digest.digest())
     }
 
-    private fun httpGetText(urlString: String, isEnglish: Boolean): String {
+    private fun httpGetText(
+        urlString: String,
+        isEnglish: Boolean,
+        accept: String = "application/vnd.github+json",
+        timeoutMs: Int = 15_000
+    ): String {
         val conn = openFollowingRedirects(
             urlString = urlString,
-            accept = "application/vnd.github+json",
-            isEnglish = isEnglish
+            accept = accept,
+            isEnglish = isEnglish,
+            connectTimeoutMs = timeoutMs,
+            readTimeoutMs = timeoutMs * 2
         )
         return try {
             val code = conn.responseCode
@@ -687,14 +790,16 @@ class AppUpdateManager(private val context: Context) {
     private fun openFollowingRedirects(
         urlString: String,
         accept: String,
-        isEnglish: Boolean
+        isEnglish: Boolean,
+        connectTimeoutMs: Int = 15_000,
+        readTimeoutMs: Int = 30_000
     ): HttpURLConnection {
         var currentUrl = urlString
         for (hop in 0..5) {
             val conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
                 instanceFollowRedirects = false
-                connectTimeout = 15_000
-                readTimeout = 30_000
+                connectTimeout = connectTimeoutMs
+                readTimeout = readTimeoutMs
                 requestMethod = "GET"
                 setRequestProperty("Accept", accept)
                 setRequestProperty("User-Agent", "TSCC-Android/${BuildConfig.VERSION_NAME}")

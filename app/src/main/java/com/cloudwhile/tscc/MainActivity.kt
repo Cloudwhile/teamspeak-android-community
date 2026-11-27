@@ -192,9 +192,9 @@ private fun MainAppShell(viewModel: MainViewModel) {
         }
     }
 
-    LaunchedEffect(settings.isLoaded, settings.onboardingCompleted, settings.autoCheckUpdates) {
-        if (settings.isLoaded && settings.onboardingCompleted && !hasCheckedStartupUpdate && settings.autoCheckUpdates) {
-            delay(1600L)
+    LaunchedEffect(showLaunchSplash, settings.isLoaded, settings.onboardingCompleted, settings.autoCheckUpdates) {
+        if (!showLaunchSplash && settings.isLoaded && settings.onboardingCompleted && !hasCheckedStartupUpdate && settings.autoCheckUpdates) {
+            delay(500L)
             hasCheckedStartupUpdate = true
             viewModel.checkForUpdates(manual = false)
         }
@@ -491,7 +491,7 @@ private fun MainAppShell(viewModel: MainViewModel) {
         )
     }
 
-    if (updateState.showDialog && updateState.latestRelease != null) {
+    if (!showLaunchSplash && updateState.showDialog && updateState.latestRelease != null) {
         AppUpdateDialog(
             state = updateState,
             onStartDownload = {
