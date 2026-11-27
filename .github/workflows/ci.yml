@@ -35,8 +35,11 @@ jobs:
 
       - name: Install native build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends cmake ninja-build pkg-config build-essential
+          if ! command -v cmake >/dev/null || ! command -v ninja >/dev/null || ! command -v pkg-config >/dev/null || ! command -v gcc >/dev/null; then
+            sudo rm -f /etc/apt/sources.list.d/*microsoft* /etc/apt/sources.list.d/*azure* || true
+            sudo apt-get update || true
+            sudo apt-get install -y --no-install-recommends cmake ninja-build pkg-config build-essential
+          fi
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -66,8 +69,11 @@ jobs:
 
       - name: Install Ninja build tool
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ninja-build
+          if ! command -v ninja >/dev/null; then
+            sudo rm -f /etc/apt/sources.list.d/*microsoft* /etc/apt/sources.list.d/*azure* || true
+            sudo apt-get update || true
+            sudo apt-get install -y --no-install-recommends ninja-build
+          fi
 
       - name: Configure Android SDK, NDK & CMake
         run: |
@@ -76,6 +82,7 @@ jobs:
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/cmake/3.22.1/bin" >> "$GITHUB_PATH"
           SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --licenses > /dev/null || true
           "$SDKMANAGER" --install \
