@@ -146,6 +146,7 @@ private fun MainAppShell(viewModel: MainViewModel) {
     val unreadChatCounts by viewModel.unreadChatCounts.collectAsState()
     val pokeQueue by viewModel.pokeQueue.collectAsState()
     val pendingDeepLink by viewModel.pendingDeepLink.collectAsState()
+    val onboardingDismissedInSession by viewModel.onboardingDismissedInSession.collectAsState()
 
     val colors = AppTheme.colors
     val strings = AppTheme.strings
@@ -335,7 +336,14 @@ private fun MainAppShell(viewModel: MainViewModel) {
         )
     }
 
-    val showOnboarding = settings.isLoaded && !settings.onboardingCompleted
+    var onboardingSessionLocked by rememberSaveable { mutableStateOf(false) }
+    if (onboardingDismissedInSession && onboardingSessionLocked) {
+        onboardingSessionLocked = false
+    } else if (!onboardingDismissedInSession && settings.isLoaded && !settings.onboardingCompleted && !onboardingSessionLocked) {
+        onboardingSessionLocked = true
+    }
+    val showOnboarding = !onboardingDismissedInSession &&
+        (onboardingSessionLocked || (settings.isLoaded && !settings.onboardingCompleted))
 
     Box(
         modifier = Modifier

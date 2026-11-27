@@ -9,8 +9,12 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.cloudwhile.tscc.data.model.AppLanguage
 import com.cloudwhile.tscc.data.model.VoiceMode
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 private val Context.dataStore by preferencesDataStore(name = "tscc_settings")
 
@@ -33,6 +37,22 @@ data class AppSettings(
 )
 
 class SettingsRepository(private val context: Context) {
+
+    private val initScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    init {
+        // Pin ONBOARDING_COMPLETED explicitly on first launch so updating nickname or voice mode
+        // mid-onboarding never flips onboardingCompleted to true prematurely.
+        initScope.launch {
+            context.dataStore.edit { prefs ->
+                if (prefs[Keys.ONBOARDING_COMPLETED] == null) {
+                    val hasExistingUserPrefs =
+                        prefs[Keys.DEFAULT_NICKNAME] != null || prefs[Keys.VOICE_MODE] != null
+                    prefs[Keys.ONBOARDING_COMPLETED] = hasExistingUserPrefs
+                }
+            }
+        }
+    }
 
     private object Keys {
         val DEFAULT_NICKNAME = stringPreferencesKey("default_nickname")
@@ -73,12 +93,25 @@ class SettingsRepository(private val context: Context) {
         )
     }
 
+    private fun androidx.datastore.preferences.core.MutablePreferences.preserveImplicitOnboardingState() {
+        if (this[Keys.ONBOARDING_COMPLETED] == null) {
+            this[Keys.ONBOARDING_COMPLETED] =
+                this[Keys.DEFAULT_NICKNAME] != null || this[Keys.VOICE_MODE] != null
+        }
+    }
+
     suspend fun setDefaultNickname(name: String) {
-        context.dataStore.edit { it[Keys.DEFAULT_NICKNAME] = name.trim().ifBlank { "TSCC_Player" } }
+        context.dataStore.edit {
+            it.preserveImplicitOnboardingState()
+            it[Keys.DEFAULT_NICKNAME] = name.trim().ifBlank { "TSCC_Player" }
+        }
     }
 
     suspend fun setVoiceMode(mode: VoiceMode) {
-        context.dataStore.edit { it[Keys.VOICE_MODE] = mode.code }
+        context.dataStore.edit {
+            it.preserveImplicitOnboardingState()
+            it[Keys.VOICE_MODE] = mode.code
+        }
     }
 
     suspend fun setVadThresholdDb(db: Float) {
@@ -126,6 +159,10 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun clearAllSettings() {
-        context.dataStore.edit { it.clear() }
+        context.dataStore.edit {
+            it.clear()
+            it[Keys.ONBOARDING_COMPLETED] = false
+        }
     }
+
 }

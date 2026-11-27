@@ -670,7 +670,9 @@ fun AppCapsuleField(
                     Text(
                         text = placeholder,
                         color = colors.textTertiary,
-                        fontSize = 14.sp
+                        fontSize = 14.sp,
+                        maxLines = if (singleLine) 1 else maxLines,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 BasicTextField(

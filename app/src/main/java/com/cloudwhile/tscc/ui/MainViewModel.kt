@@ -105,6 +105,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _pendingDeepLink = MutableStateFlow<Ts3ServerUri?>(null)
     val pendingDeepLink: StateFlow<Ts3ServerUri?> = _pendingDeepLink.asStateFlow()
 
+    private val _onboardingDismissedInSession = MutableStateFlow(false)
+    val onboardingDismissedInSession: StateFlow<Boolean> = _onboardingDismissedInSession.asStateFlow()
+
     private val _micPermissionRequestSeq = MutableStateFlow(0L)
     val micPermissionRequestSeq: StateFlow<Long> = _micPermissionRequestSeq.asStateFlow()
 
@@ -321,6 +324,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun completeOnboarding() {
+        _onboardingDismissedInSession.value = true
         viewModelScope.launch { settingsRepo.setOnboardingCompleted(true) }
     }
 
@@ -359,6 +363,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val en = repository.isEnglish()
             repository.clearAllAppData()
                 .onSuccess {
+                    _onboardingDismissedInSession.value = false
                     _selectedBookmarkId.value = null
                     _collapsedChannelIds.value = emptySet()
                     _activeDmPeer.value = null
