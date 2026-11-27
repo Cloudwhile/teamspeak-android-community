@@ -905,6 +905,43 @@ class TsccRepository(
         if (channel.id == _serverSnapshot.value.myChannelId) return
 
         if (explicitPassword != null) {
+    /**
+     * Synchronously flushes the encrypted `clientdisconnect` UDP packet to the OS socket and waits
+     * briefly (up to [timeoutMs]) for the server ACK before process teardown when the user swipes
+     * TSCC away from Recent Tasks, preventing ghost sessions stuck until UDP timeout.
+     */
+    fun disconnectForAppTermination(
+        reason: String = if (isEnglish()) "App closed" else "清理后台退出",
+        timeoutMs: Long = 350L
+    ) {
+        val wasConnectedOrConnecting = _connectionStatus.value != ConnectionStatus.DISCONNECTED
+        val wasLoopback = _isLoopbackTesting.value
+        if (!wasConnectedOrConnecting && !wasLoopback) return
+
+        _wasManualDisconnect.value = true
+        _activeBookmarkId.value = null
+        _passwordPrompt.value = null
+        _securityUpgradeProgress.value = null
+        _isLoopbackTesting.value = false
+        sessionChannelPasswords.clear()
+        pendingCreatedChannelPassword = null
+        liveStreamManager.onServerDisconnected()
+
+        if (wasConnectedOrConnecting && NativeBridge.isNativeLoaded) {
+            NativeBridge.nativeCancelSecurityUpgrade()
+            NativeBridge.nativeDisconnectBlocking(reason, timeoutMs)
+        }
+
+        _connectionStatus.value = ConnectionStatus.DISCONNECTED
+        _serverSnapshot.value = ServerSnapshot()
+        _speakingClientIds.value = emptySet()
+        _isVoiceTransmitting.value = false
+        _isSelfAway.value = false
+        currentAwayMessage = ""
+        blockedSpeechScore = 0
+        lastBlockedSpeechHintMs = 0L
+    }
+
             if (explicitPassword.isNotEmpty()) {
                 sessionChannelPasswords[channel.id] = explicitPassword
             }

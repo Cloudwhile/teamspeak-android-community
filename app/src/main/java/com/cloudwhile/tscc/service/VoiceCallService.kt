@@ -258,7 +258,22 @@ class VoiceCallService : LifecycleService() {
             }
         }
 
-        return START_STICKY
+        return START_NOT_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val app = application as TsccApp
+        val repo = app.tsccRepository
+        val isEn = resolveAppStrings(repo.appSettings.value.appLanguage).isEnglish
+        repo.disconnectForAppTermination(
+            reason = if (isEn) "Closed from recent apps" else "关闭后台退出"
+        )
+        pendingStopJob?.cancel()
+        pendingStopJob = null
+        stopCleanup()
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+        stopSelf()
+        super.onTaskRemoved(rootIntent)
     }
 
     private fun scheduleGracefulStop() {
@@ -277,6 +292,14 @@ class VoiceCallService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        val app = application as TsccApp
+        val repo = app.tsccRepository
+        if (repo.connectionStatus.value != ConnectionStatus.DISCONNECTED || repo.isLoopbackTesting.value) {
+            val isEn = resolveAppStrings(repo.appSettings.value.appLanguage).isEnglish
+            repo.disconnectForAppTermination(
+                reason = if (isEn) "Voice service stopped" else "后台语音服务结束"
+            )
+        }
         pendingStopJob?.cancel()
         pendingStopJob = null
         stopCleanup()

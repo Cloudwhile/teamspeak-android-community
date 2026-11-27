@@ -44,6 +44,13 @@ class TsccApp : Application() {
         settingsRepository = SettingsRepository(this)
         tsccRepository = TsccRepository(this, database, settingsRepository)
         appUpdateManager = AppUpdateManager(this)
+        runCatching {
+            Runtime.getRuntime().addShutdownHook(
+                Thread({
+                    runCatching { tsccRepository.disconnectForAppTermination() }
+                }, "tscc-shutdown-disconnect")
+            )
+        }
     }
 
     private fun registerForegroundTracker() {
@@ -68,6 +75,12 @@ class TsccApp : Application() {
 
     fun syncNotificationChannels(language: AppLanguage) {
         val nm = getSystemService(NotificationManager::class.java) ?: return
+        val useEn = resolveAppStrings(language).isEnglish
+        val targetLocale = if (useEn) Locale.ENGLISH else Locale.SIMPLIFIED_CHINESE
+        val localizedContext = Configuration(resources.configuration).run {
+            setLocale(targetLocale)
+            createConfigurationContext(this)
+        }
         val voiceChannel = NotificationChannel(
             CHANNEL_VOICE_CALL,
             localizedContext.getString(R.string.notif_channel_voice_name),
@@ -75,12 +88,6 @@ class TsccApp : Application() {
         ).apply {
             description = localizedContext.getString(R.string.notif_channel_voice_desc)
             setShowBadge(false)
-        val useEn = resolveAppStrings(language).isEnglish
-        val targetLocale = if (useEn) Locale.ENGLISH else Locale.SIMPLIFIED_CHINESE
-        val localizedContext = Configuration(resources.configuration).run {
-            setLocale(targetLocale)
-            createConfigurationContext(this)
-        }
         }
         val alertsChannel = NotificationChannel(
             CHANNEL_ALERTS,

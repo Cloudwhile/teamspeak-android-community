@@ -133,6 +133,9 @@ object NativeBridge : NativeEventCallback {
     external fun nativeDisconnect(reasonMessage: String)
 
     @JvmStatic
+    external fun nativeDisconnectBlocking(reasonMessage: String, timeoutMs: Long)
+
+    @JvmStatic
     external fun nativeSwitchChannel(channelId: Long, password: String): Boolean
 
     @JvmStatic

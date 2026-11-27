@@ -48,6 +48,11 @@ pub enum SessionCommand {
     Disconnect {
         reason: String,
     },
+    DisconnectSync {
+        reason: String,
+        timeout_ms: u64,
+        done_tx: std::sync::mpsc::SyncSender<()>,
+    },
     SwitchChannel {
         channel_id: u64,
         password: String,
@@ -296,13 +301,26 @@ async fn poll_active_event(
     con.events().next().await
 }
 
-async fn gracefully_close_connection(mut con: Connection, reason: String) {
+async fn gracefully_close_connection(con: Connection, reason: String) {
+    gracefully_close_connection_with_timeout(con, reason, Duration::from_millis(1800)).await;
+}
+
+async fn gracefully_close_connection_with_timeout(
+    mut con: Connection,
+    reason: String,
+    max_wait: Duration,
+) {
+    if con.get_state().is_err() {
+        // Still in initial handshake (`Connecting`): drop immediately so handshake aborts
+        // instead of completing a new session after user already cancelled/closed.
+        return;
+    }
     let opts = DisconnectOptions::new()
         .reason(Reason::Clientdisconnect)
         .message(reason);
     if con.disconnect(opts).is_ok() {
         let _ = tokio::time::timeout(
-            Duration::from_millis(2000),
+            max_wait,
             con.events().for_each(|_| futures::future::ready(())),
         )
         .await;
@@ -517,6 +535,28 @@ async fn handle_command(
                     if dto.security_level > 8 {
                         let _ = event_tx.send(CoreEventEnvelope {
                             kind: "identity_upgraded".to_string(),
+        SessionCommand::DisconnectSync {
+            reason,
+            timeout_ms,
+            done_tx,
+        } => {
+            if let Ok(mut eng) = audio_engine.lock() {
+                eng.reset_playback_queues();
+                eng.set_server_can_send_audio(false);
+            }
+            if let Some(mut sess) = active.take() {
+                if let Some(cancel) = sess.upgrade_cancel.take() {
+                    cancel.store(true, Ordering::SeqCst);
+                }
+                emit_state(event_tx, "DISCONNECTED", Some(reason.clone()));
+                if let Some(con) = sess.con.take() {
+                    let wait = Duration::from_millis(timeout_ms.clamp(50, 1500));
+                    gracefully_close_connection_with_timeout(con, reason, wait).await;
+                }
+            }
+            let _ = done_tx.send(());
+        }
+
                             security_level: Some(dto.security_level),
                             key_offset: Some(dto.key_offset),
                             updated_ini: Some(dto.ini_content),
@@ -2509,3 +2549,33 @@ mod tests {
         assert!(msg.contains("密码不正确"));
     }
 }
+
+    #[test]
+    fn disconnect_sync_acknowledges_completion_promptly() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
+        let (ev_tx, _ev_rx) = mpsc::unbounded_channel();
+        let audio = Arc::new(Mutex::new(RealtimeAudioEngine::new().expect("audio engine")));
+        let cancel = Arc::new(AtomicBool::new(false));
+        let actor_cmd_tx = cmd_tx.clone();
+        rt.spawn(async move {
+            run_session_actor(cmd_rx, actor_cmd_tx, ev_tx, audio, cancel).await;
+        });
+
+        let (done_tx, done_rx) = std::sync::mpsc::sync_channel(1);
+        cmd_tx
+            .send(SessionCommand::DisconnectSync {
+                reason: "Task removed".to_string(),
+                timeout_ms: 250,
+                done_tx,
+            })
+            .expect("send DisconnectSync");
+
+        rt.block_on(async {
+            tokio::task::yield_now().await;
+        });
+        assert!(done_rx.recv_timeout(Duration::from_millis(200)).is_ok());
+    }

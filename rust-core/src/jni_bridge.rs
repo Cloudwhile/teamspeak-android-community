@@ -261,6 +261,30 @@ pub extern "system" fn Java_com_cloudwhile_tscc_data_NativeBridge_nativeDisconne
 }
 
 #[no_mangle]
+pub extern "system" fn Java_com_cloudwhile_tscc_data_NativeBridge_nativeDisconnectBlocking(
+    mut env: JNIEnv,
+    _class: JClass,
+    reason_message: JString,
+    timeout_ms: jlong,
+) {
+    let Some(ctx) = ENGINE.get() else { return };
+    let reason = jstr(&mut env, &reason_message);
+    let capped_ms = (timeout_ms.clamp(50, 1500)) as u64;
+    let (done_tx, done_rx) = std::sync::mpsc::sync_channel::<()>(1);
+    if ctx
+        .cmd_tx
+        .send(SessionCommand::DisconnectSync {
+            reason,
+            timeout_ms: capped_ms,
+            done_tx,
+        })
+        .is_ok()
+    {
+        let _ = done_rx.recv_timeout(std::time::Duration::from_millis(capped_ms + 40));
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_com_cloudwhile_tscc_data_NativeBridge_nativeSwitchChannel(
     mut env: JNIEnv,
     _class: JClass,
