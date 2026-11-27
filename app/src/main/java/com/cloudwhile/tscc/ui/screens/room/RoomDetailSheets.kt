@@ -82,7 +82,7 @@ import com.cloudwhile.tscc.data.model.OnlineClient
 import com.cloudwhile.tscc.data.model.ServerSnapshot
 import com.cloudwhile.tscc.data.model.resolveBadges
 import com.cloudwhile.tscc.data.util.BBCodeParser
-import com.cloudwhile.tscc.data.util.Ts3ServerUri
+import com.cloudwhile.tscc.data.util.TsccServerUri
 import com.cloudwhile.tscc.ui.components.AppCapsuleField
 import com.cloudwhile.tscc.ui.components.AppModalDialog
 import com.cloudwhile.tscc.ui.components.AppPrimaryPillButton
@@ -289,15 +289,15 @@ fun ServerInfoBottomSheet(
                             val parts = snapshot.serverAddress.split(':')
                             val host = parts.firstOrNull().orEmpty()
                             val port = parts.getOrNull(1)?.toIntOrNull() ?: 9987
-                            val invite = Ts3ServerUri(
+                            val invite = TsccServerUri(
                                 host = host,
                                 port = port,
                                 label = snapshot.serverName
                             ).toUriString()
                             onCopyText(
-                                "ts3_invite",
+                                "tscc_invite",
                                 invite,
-                                if (isEn) "Copied TeamSpeak invite link" else "已复制服务器邀请链接"
+                                if (isEn) "Server invite link copied" else "已复制服务器邀请链接"
                             )
                         },
                         modifier = Modifier.weight(1f)

@@ -10,7 +10,7 @@ import androidx.compose.ui.text.style.TextDecoration
 
 /**
  * Converts TeamSpeak BBCode (`[b]`, `[i]`, `[u]`, `[s]`, `[color=#RRGGBB]`, `[url=...]`)
- * and bare HTTP(S) / `ts3server://` links into a Compose [AnnotatedString] with `"URL"` annotations.
+ * and bare HTTP(S) / `tscc://` links into a Compose [AnnotatedString] with `"URL"` annotations.
  */
 object BBCodeParser {
 
@@ -21,7 +21,7 @@ object BBCodeParser {
         RegexOption.IGNORE_CASE
     )
     private val bareUrlRegex = Regex(
-        """(https?://[^\s\[]+|ts3server://[^\s\[]+)""",
+        """(https?://[^\s\["'<>，。！？；：、（）【】「」『』《》\u3000]+|tscc://[^\s\["'<>，。！？；：、（）【】「」『』《》\u3000]+)""",
         RegexOption.IGNORE_CASE
     )
 

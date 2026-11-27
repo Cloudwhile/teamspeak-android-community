@@ -24,8 +24,8 @@ import com.cloudwhile.tscc.data.model.UiToastMessage
 import com.cloudwhile.tscc.data.model.VoiceMode
 import com.cloudwhile.tscc.data.model.WatchingStreamState
 import com.cloudwhile.tscc.data.update.UpdateUiState
-import com.cloudwhile.tscc.data.util.Ts3ServerUri
-import com.cloudwhile.tscc.data.util.Ts3UriParser
+import com.cloudwhile.tscc.data.util.TsccServerUri
+import com.cloudwhile.tscc.data.util.TsccUriParser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -102,8 +102,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _activeDmPeer = MutableStateFlow<OnlineClient?>(null)
     val activeDmPeer: StateFlow<OnlineClient?> = _activeDmPeer.asStateFlow()
 
-    private val _pendingDeepLink = MutableStateFlow<Ts3ServerUri?>(null)
-    val pendingDeepLink: StateFlow<Ts3ServerUri?> = _pendingDeepLink.asStateFlow()
+    private val _pendingDeepLink = MutableStateFlow<TsccServerUri?>(null)
+    val pendingDeepLink: StateFlow<TsccServerUri?> = _pendingDeepLink.asStateFlow()
 
     private val _onboardingDismissedInSession = MutableStateFlow(false)
     val onboardingDismissedInSession: StateFlow<Boolean> = _onboardingDismissedInSession.asStateFlow()
@@ -124,13 +124,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun handleIncomingDeepLink(rawUri: String) {
-        val parsed = Ts3UriParser.parse(rawUri)
+        val parsed = TsccUriParser.parse(rawUri, requireScheme = true)
         if (parsed != null) {
             _pendingDeepLink.value = parsed
         } else {
             val en = repository.isEnglish()
             showToast(
-                if (en) "Unrecognized server link: $rawUri" else "无法识别的服务器链接: $rawUri",
+                if (en) "Unrecognized tscc:// invite link: $rawUri" else "无法识别的 tscc:// 邀请链接: $rawUri",
                 ToastTone.ERROR
             )
         }
@@ -138,6 +138,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun consumePendingDeepLink() {
         _pendingDeepLink.value = null
+    }
+
+    fun connectFromDeepLink(uri: TsccServerUri, saveBookmark: Boolean = false) {
+        _pendingDeepLink.value = null
+        val nick = uri.nickname?.trim()?.takeIf { it.isNotEmpty() } ?: settings.value.defaultNickname
+        val defaultLabel = if (uri.port == 9987) uri.host else "${uri.host}:${uri.port}"
+        val resolvedLabel = uri.label?.trim()?.takeIf { it.isNotEmpty() } ?: defaultLabel
+
+        if (saveBookmark) {
+            viewModelScope.launch {
+                val bm = BookmarkEntity(
+                    label = resolvedLabel,
+                    address = uri.host,
+                    port = uri.port,
+                    nickname = nick,
+                    serverPassword = uri.serverPassword.orEmpty(),
+                    defaultChannel = uri.channel.orEmpty(),
+                    channelPassword = uri.channelPassword.orEmpty(),
+                    lastConnectedAt = System.currentTimeMillis()
+                )
+                val id = repository.upsertBookmark(bm)
+                _selectedBookmarkId.value = id
+            }
+        }
+
+        repository.connectDirect(
+            address = uri.host,
+            port = uri.port,
+            nickname = nick,
+            serverPassword = uri.serverPassword.orEmpty(),
+            defaultChannel = uri.channel.orEmpty(),
+            channelPassword = uri.channelPassword.orEmpty(),
+            privilegeKey = uri.privilegeKey
+        )
     }
 
     fun toggleChannelCollapsed(channelId: Long) {
@@ -327,6 +361,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _onboardingDismissedInSession.value = true
         viewModelScope.launch { settingsRepo.setOnboardingCompleted(true) }
     }
+
 
     fun checkForUpdates(manual: Boolean) {
         val curSettings = settings.value

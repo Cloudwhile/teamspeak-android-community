@@ -51,13 +51,19 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- TeamSpeak Deep Link: ts3server://host?port=9987&nickname=... -->
+            <!-- TSCC Invite Deep Link: tscc://host?port=9987&nickname=... -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="ts3server" />
-                <data android:scheme="teamspeak" />
+                <data android:scheme="tscc" />
+            </intent-filter>
+
+            <!-- System Share Sheet: share text containing a tscc:// invite link -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
 

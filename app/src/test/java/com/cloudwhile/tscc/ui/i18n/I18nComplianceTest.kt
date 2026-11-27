@@ -7,7 +7,7 @@ import com.cloudwhile.tscc.data.model.VoiceMode
 import com.cloudwhile.tscc.data.update.AppUpdateManager
 import com.cloudwhile.tscc.data.update.formatBytesHexLower
 import com.cloudwhile.tscc.data.util.BBCodeParser
-import com.cloudwhile.tscc.data.util.Ts3UriParser
+import com.cloudwhile.tscc.data.util.TsccUriParser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -120,8 +120,9 @@ class I18nComplianceTest {
             assertEquals("italic text", annotated.text)
             assertTrue(annotated.spanStyles.any { it.item.fontStyle == FontStyle.Italic })
 
-            val parsedUri = Ts3UriParser.parse(
-                "ts3server://voice.example.com?NICKNAME=Player&CHANNELPASSWORD=secret&PRIVILEGEKEY=tok123"
+            val parsedUri = TsccUriParser.parse(
+                "tscc://voice.example.com?NICKNAME=Player&CHANNELPASSWORD=secret&PRIVILEGEKEY=tok123",
+                requireScheme = true
             )
             assertNotNull(parsedUri)
             assertEquals("Player", parsedUri?.nickname)

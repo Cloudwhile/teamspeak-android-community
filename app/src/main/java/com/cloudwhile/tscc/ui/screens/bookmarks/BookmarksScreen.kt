@@ -64,8 +64,8 @@ import androidx.compose.ui.unit.sp
 import com.cloudwhile.tscc.data.db.BookmarkEntity
 import com.cloudwhile.tscc.data.db.IdentityEntity
 import com.cloudwhile.tscc.data.model.ConnectionStatus
-import com.cloudwhile.tscc.data.util.Ts3ServerUri
-import com.cloudwhile.tscc.data.util.Ts3UriParser
+import com.cloudwhile.tscc.data.util.TsccServerUri
+import com.cloudwhile.tscc.data.util.TsccUriParser
 import com.cloudwhile.tscc.ui.components.AppCapsuleField
 import com.cloudwhile.tscc.ui.components.AppCircleIconButton
 import com.cloudwhile.tscc.ui.components.AppModalDialog
@@ -228,7 +228,7 @@ fun BookmarksScreen(
                             showEditDialog = true
                         },
                         onShare = {
-                            val link = Ts3ServerUri(
+                            val link = TsccServerUri(
                                 host = bm.address,
                                 port = bm.port,
                                 nickname = bm.nickname,
@@ -236,8 +236,8 @@ fun BookmarksScreen(
                                 label = bm.label
                             ).toUriString()
                             val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                            cm?.setPrimaryClip(ClipData.newPlainText("ts3server", link))
-                            onCopyMessage(if (strings.isEnglish) "Server link copied" else "已复制服务器链接")
+                            cm?.setPrimaryClip(ClipData.newPlainText("tscc", link))
+                            onCopyMessage(if (strings.isEnglish) "Server invite link copied" else "已复制服务器邀请链接")
                         },
                         onDelete = { pendingDeleteBookmark = bm }
                     )
@@ -641,7 +641,7 @@ private fun BookmarkEditDialog(
     var channelPassword by remember { mutableStateOf(initial?.channelPassword.orEmpty()) }
     var selectedIdentityId by remember { mutableStateOf(initial?.identityId) }
 
-    val parsedAddress = remember(rawHostPort) { Ts3UriParser.parse(rawHostPort) }
+    val parsedAddress = remember(rawHostPort) { TsccUriParser.parse(rawHostPort) }
     val canSubmit = nickname.isNotBlank() && parsedAddress != null
 
     AppModalDialog(
@@ -685,10 +685,8 @@ private fun BookmarkEditDialog(
             value = rawHostPort,
             onValueChange = { nextInput ->
                 val trimmed = nextInput.trim()
-                if (trimmed.startsWith("ts3server://", ignoreCase = true) ||
-                    trimmed.startsWith("teamspeak://", ignoreCase = true)
-                ) {
-                    val uri = Ts3UriParser.parse(trimmed)
+                if (TsccUriParser.isTsccDeepLink(trimmed)) {
+                    val uri = TsccUriParser.parse(trimmed, requireScheme = true)
                     if (uri != null) {
                         rawHostPort = if (uri.port == 9987) uri.host else "${uri.host}:${uri.port}"
                         uri.nickname?.takeIf { it.isNotBlank() && (nickname.isBlank() || nickname == defaultNickname) }
@@ -711,7 +709,7 @@ private fun BookmarkEditDialog(
                 rawHostPort = nextInput
             },
             label = strings.serverAddressLabel,
-            placeholder = "ts.example.com / ts3server://...",
+            placeholder = "ts.example.com / tscc://...",
             leadingIcon = Icons.Default.Dns
         )
 

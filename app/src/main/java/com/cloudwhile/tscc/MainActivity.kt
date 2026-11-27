@@ -17,14 +17,26 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.HeadsetMic
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -41,9 +53,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -52,6 +67,7 @@ import com.cloudwhile.tscc.data.model.ConnectionStatus
 import com.cloudwhile.tscc.data.model.ToastAction
 import com.cloudwhile.tscc.data.model.ToastTone
 import com.cloudwhile.tscc.data.model.UiToastMessage
+import com.cloudwhile.tscc.data.util.TsccUriParser
 import com.cloudwhile.tscc.service.VoiceCallService
 import com.cloudwhile.tscc.ui.MainViewModel
 import com.cloudwhile.tscc.ui.components.AppModalDialog
@@ -110,12 +126,19 @@ class MainActivity : ComponentActivity() {
             intent.removeExtra(VoiceCallService.EXTRA_REQUEST_MIC_PERMISSION)
             viewModel.requestMicPermissionFlow()
         }
-        val dataStr = intent.dataString ?: return
-        if (dataStr.startsWith("ts3server://", ignoreCase = true) ||
-            dataStr.startsWith("teamspeak://", ignoreCase = true)
-        ) {
+        val dataStr = intent.dataString
+        if (!dataStr.isNullOrBlank() && TsccUriParser.isTsccDeepLink(dataStr)) {
             intent.data = null
             viewModel.handleIncomingDeepLink(dataStr)
+            return
+        }
+        if (intent.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
+            val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+            val extractedUri = TsccUriParser.extractFirstTsccUri(sharedText)
+            if (extractedUri != null) {
+                intent.removeExtra(Intent.EXTRA_TEXT)
+                viewModel.handleIncomingDeepLink(extractedUri)
+            }
         }
     }
 }
@@ -147,6 +170,12 @@ private fun MainAppShell(viewModel: MainViewModel) {
     val pokeQueue by viewModel.pokeQueue.collectAsState()
     val pendingDeepLink by viewModel.pendingDeepLink.collectAsState()
     val onboardingDismissedInSession by viewModel.onboardingDismissedInSession.collectAsState()
+
+    LaunchedEffect(pendingDeepLink) {
+        if (pendingDeepLink != null) {
+            showLaunchSplash = false
+        }
+    }
 
     val colors = AppTheme.colors
     val strings = AppTheme.strings
@@ -515,37 +544,71 @@ private fun MainAppShell(viewModel: MainViewModel) {
         )
     }
 
-    pendingDeepLink?.let { uri ->
-        AppModalDialog(
-            title = if (strings.isEnglish) "Join External Voice Server?" else "加入外部语音频道？",
-            subtitle = if (strings.isEnglish) "TeamSpeak invite link detected" else "检测到外部 TeamSpeak 邀请链接",
-            onDismiss = viewModel::consumePendingDeepLink,
-            confirmText = strings.enterNow,
-            onConfirm = {
-                viewModel.consumePendingDeepLink()
-                viewModel.repository.connectDirect(
-                    address = uri.host,
-                    port = uri.port,
-                    nickname = uri.nickname ?: settings.defaultNickname,
-                    serverPassword = uri.serverPassword.orEmpty(),
-                    defaultChannel = uri.channel.orEmpty(),
-                    channelPassword = uri.channelPassword.orEmpty(),
-                    privilegeKey = uri.privilegeKey
-                )
-            }
-        ) {
-            Column {
-                Text(
-                    text = "${uri.host}:${uri.port}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.textPrimary
-                )
-                if (!uri.channel.isNullOrBlank()) {
+    if (!showOnboarding) {
+        pendingDeepLink?.let { uri ->
+            var saveAsBookmark by remember(uri) { mutableStateOf(!uri.label.isNullOrBlank()) }
+            AppModalDialog(
+                title = if (strings.isEnglish) "Join External Voice Server?" else "加入外部语音频道？",
+                subtitle = if (strings.isEnglish) {
+                    "Voice server invite link detected"
+                } else {
+                    "检测到服务器语音邀请链接"
+                },
+                onDismiss = viewModel::consumePendingDeepLink,
+                confirmText = strings.enterNow,
+                onConfirm = {
+                    viewModel.connectFromDeepLink(uri, saveBookmark = saveAsBookmark)
+                }
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (!uri.label.isNullOrBlank()) {
+                        Text(
+                            text = uri.label,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = colors.textPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                     Text(
-                        text = "${strings.defaultSubChannelPrefix}${uri.channel}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.textSecondary
+                        text = "${uri.host}:${uri.port}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.textPrimary
                     )
+                    if (!uri.channel.isNullOrBlank()) {
+                        Text(
+                            text = "${strings.defaultSubChannelPrefix}${uri.channel}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.textSecondary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(colors.cardElevated)
+                            .border(1.dp, colors.border, RoundedCornerShape(14.dp))
+                            .clickable { saveAsBookmark = !saveAsBookmark }
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = if (saveAsBookmark) colors.emerald else colors.textTertiary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (strings.isEnglish) {
+                                "Also save to Server Bookmarks"
+                            } else {
+                                "同时保存到服务器书签"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.textPrimary
+                        )
+                    }
                 }
             }
         }

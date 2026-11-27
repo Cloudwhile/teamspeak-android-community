@@ -127,6 +127,7 @@ import com.cloudwhile.tscc.data.model.resolveBadges
 import org.webrtc.EglBase
 import org.webrtc.VideoTrack
 import com.cloudwhile.tscc.data.util.BBCodeParser
+import com.cloudwhile.tscc.data.util.TsccUriParser
 import com.cloudwhile.tscc.ui.components.AppCapsuleField
 import com.cloudwhile.tscc.ui.components.AppCircleIconButton
 import com.cloudwhile.tscc.ui.components.AppPrimaryPillButton
@@ -745,7 +746,7 @@ fun ServerRoomScreen(
                 deleteTargetChannel = target
             },
             onClickUrl = { url ->
-                if (url.startsWith("ts3server://", ignoreCase = true)) {
+                if (TsccUriParser.isTsccDeepLink(url)) {
                     selectedChannelIdForSheet = null
                     onOpenDeepLink(url)
                 } else {
@@ -813,7 +814,7 @@ fun ServerRoomScreen(
             onSelectDmPeer = onOpenDmWith,
             onSend = onSendChatMessage,
             onClickUrl = { url ->
-                if (url.startsWith("ts3server://", ignoreCase = true)) {
+                if (TsccUriParser.isTsccDeepLink(url)) {
                     showChatSheet = false
                     onOpenDeepLink(url)
                 } else {
@@ -835,9 +836,7 @@ fun ServerRoomScreen(
                 onShowMessage(toast)
             },
             onClickUrl = { url ->
-                if (url.startsWith("ts3server://", ignoreCase = true) ||
-                    url.startsWith("teamspeak://", ignoreCase = true)
-                ) {
+                if (TsccUriParser.isTsccDeepLink(url)) {
                     showServerInfoSheet = false
                     onOpenDeepLink(url)
                 } else {
@@ -865,9 +864,7 @@ fun ServerRoomScreen(
                 onShowMessage(toast)
             },
             onClickUrl = { url ->
-                if (url.startsWith("ts3server://", ignoreCase = true) ||
-                    url.startsWith("teamspeak://", ignoreCase = true)
-                ) {
+                if (TsccUriParser.isTsccDeepLink(url)) {
                     selectedClientForSheet = null
                     onOpenDeepLink(url)
                 } else {

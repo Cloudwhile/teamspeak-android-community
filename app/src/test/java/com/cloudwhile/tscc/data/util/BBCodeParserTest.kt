@@ -8,10 +8,10 @@ class BBCodeParserTest {
 
     @Test
     fun `strips tags cleanly and preserves bold and url annotations`() {
-        val raw = "欢迎来到 [b][color=#22c55e]战队语音服[/color][/b]！点击 [url=https://teamspeak.com]官网[/url] 或直接进 ts3server://ts.clan.org?port=9987"
+        val raw = "欢迎来到 [b][color=#22c55e]战队语音服[/color][/b]！点击 [url=https://teamspeak.com]官网[/url] 或直接进 tscc://ts.clan.org?port=9987"
         val annotated = BBCodeParser.parse(raw)
         assertEquals(
-            "欢迎来到 战队语音服！点击 官网 或直接进 ts3server://ts.clan.org?port=9987",
+            "欢迎来到 战队语音服！点击 官网 或直接进 tscc://ts.clan.org?port=9987",
             annotated.text
         )
 
@@ -23,6 +23,11 @@ class BBCodeParserTest {
         assertEquals(2, urls.size)
         assertEquals("https://teamspeak.com", urls[0].item)
         assertEquals("官网", annotated.text.substring(urls[0].start, urls[0].end))
-        assertEquals("ts3server://ts.clan.org?port=9987", urls[1].item)
+        assertEquals("tscc://ts.clan.org?port=9987", urls[1].item)
+
+        val inlineCjk = BBCodeParser.parse("今晚来进 tscc://ts.clan.org?port=9987，密码问队长。")
+        val cjkUrls = inlineCjk.getStringAnnotations(BBCodeParser.URL_TAG, 0, inlineCjk.length)
+        assertEquals(1, cjkUrls.size)
+        assertEquals("tscc://ts.clan.org?port=9987", cjkUrls[0].item)
     }
 }
