@@ -150,31 +150,16 @@ jobs:
         run: |
           KS_FILE="$RUNNER_TEMP/tscc-release-signing.jks"
           rm -f "$KS_FILE"
-          if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
-            echo "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$KS_FILE"
-            echo "keystore_file=$KS_FILE" >> "$GITHUB_OUTPUT"
-            echo "store_password=$SIGNING_STORE_PASSWORD" >> "$GITHUB_OUTPUT"
-            echo "key_alias=$SIGNING_KEY_ALIAS" >> "$GITHUB_OUTPUT"
-            echo "key_password=$SIGNING_KEY_PASSWORD" >> "$GITHUB_OUTPUT"
-            echo "Using repository release signing keystore."
-          else
-            echo "::warning::SIGNING_KEYSTORE_BASE64 is not set; generating fallback PKCS12 keystore so all APKs are signed and installable."
-            keytool -genkeypair \
-              -v \
-              -storetype PKCS12 \
-              -keystore "$KS_FILE" \
-              -alias "tscc" \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -storepass "android" \
-              -keypass "android" \
-              -dname "CN=TSCC Community, OU=Android, O=Cloudwhile, C=US"
-            echo "keystore_file=$KS_FILE" >> "$GITHUB_OUTPUT"
-            echo "store_password=android" >> "$GITHUB_OUTPUT"
-            echo "key_alias=tscc" >> "$GITHUB_OUTPUT"
-            echo "key_password=android" >> "$GITHUB_OUTPUT"
+          if [ -z "$SIGNING_KEYSTORE_BASE64" ] || [ -z "$SIGNING_STORE_PASSWORD" ] || [ -z "$SIGNING_KEY_ALIAS" ] || [ -z "$SIGNING_KEY_PASSWORD" ]; then
+            echo "::error::Missing required release signing secrets (SIGNING_KEYSTORE_BASE64, SIGNING_STORE_PASSWORD, SIGNING_KEY_ALIAS, SIGNING_KEY_PASSWORD). Refusing to generate a throwaway certificate so Android in-place upgrades never break."
+            exit 1
           fi
+          echo "$SIGNING_KEYSTORE_BASE64" | tr -d ' \t\r\n' | base64 --decode > "$KS_FILE"
+          echo "keystore_file=$KS_FILE" >> "$GITHUB_OUTPUT"
+          echo "store_password=$SIGNING_STORE_PASSWORD" >> "$GITHUB_OUTPUT"
+          echo "key_alias=$SIGNING_KEY_ALIAS" >> "$GITHUB_OUTPUT"
+          echo "key_password=$SIGNING_KEY_PASSWORD" >> "$GITHUB_OUTPUT"
+          echo "Configured persistent repository release signing keystore."
 
       - name: Build & verify multi-architecture Release APKs
         env:

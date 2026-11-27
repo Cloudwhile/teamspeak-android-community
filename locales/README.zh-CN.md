@@ -99,7 +99,7 @@ cargo test --manifest-path rust-core\Cargo.toml
 - **持续集成（[`.github/workflows/ci.yml`](../.github/workflows/ci.yml)）**：在推送或提交 PR 至 `master` 分支时自动执行 Rust 单元测试、三架构 JNI 交叉编译、Kotlin 单元测试、`lintVitalRelease` 静态检查以及 Debug/Release 多架构构建。
 - **版本发布（[`.github/workflows/release.yml`](../.github/workflows/release.yml)）**：推送语义化版本标签（如 `v0.1.0-alpha.1`、`v0.1.0-beta.1` 或 `v0.1.0`）或手动触发时，自动执行全套质量门禁、构建并校验 `arm64-v8a` / `armeabi-v7a` / `x86_64` / `universal` 四个签名 APK、生成 `SHA256SUMS.txt` 并创建 GitHub Release。
 
-如需在 GitHub Actions 中使用自定义正式证书签名，可在仓库 `Settings -> Secrets and variables -> Actions` 中配置以下 Secrets（未配置时构建脚本将回退至可安装的默认调试签名以保证产物可安装验证）：
+为确保所有发布版本使用恒定一致的正式签名证书以支持覆盖安装升级，请在仓库 `Settings -> Secrets and variables -> Actions` 中配置以下必填 Secrets：
 
 | Secret 名称 | 说明 |
 | :--- | :--- |

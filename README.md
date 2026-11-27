@@ -99,7 +99,7 @@ Standard GitHub Actions workflows are configured under `.github/workflows/`:
 - **Continuous Integration ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))**: Runs on pushes and pull requests to `master`, executing Rust unit tests, 3-ABI Android NDK cross-compilation, Kotlin unit tests, `lintVitalRelease`, and Debug/Release APK verification.
 - **Release Publishing ([`.github/workflows/release.yml`](.github/workflows/release.yml))**: Triggered by SemVer tags (such as `v0.1.0-alpha.1`, `v0.1.0-beta.1`, or `v0.1.0`) or `workflow_dispatch`. Builds, verifies (`apksigner verify`), checksums (`SHA256SUMS.txt`), and publishes all 4 installable multi-ABI APKs to GitHub Releases.
 
-To sign release builds with your production certificate in GitHub Actions, configure the following repository secrets under `Settings -> Secrets and variables -> Actions` (if omitted, builds fall back to an installable debug signature):
+To sign release builds in GitHub Actions and preserve seamless in-place APK upgrades across versions, configure the following required repository secrets under `Settings -> Secrets and variables -> Actions`:
 
 | Secret Name | Description |
 | :--- | :--- |
