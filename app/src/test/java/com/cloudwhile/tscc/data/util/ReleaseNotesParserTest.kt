@@ -86,33 +86,35 @@ class ReleaseNotesParserTest {
     }
 
     @Test
-    fun alpha2ChangelogsFormatAndBilingualCheck() {
+    fun releaseChangelogsFormatAndBilingualCheck() {
         val rootDir = File("..").canonicalFile.takeIf { File(it, "changelogs").exists() }
             ?: File(".").canonicalFile
 
-        val enFile = File(rootDir, "changelogs/v0.1.0-alpha.2.md")
-        val zhFile = File(rootDir, "locales/changelogs/v0.1.0-alpha.2.zh-CN.md")
-        assertTrue("Missing English changelog: ${enFile.absolutePath}", enFile.isFile)
-        assertTrue("Missing Chinese changelog: ${zhFile.absolutePath}", zhFile.isFile)
+        for (tag in listOf("v0.1.0-alpha.2", "v0.1.0-alpha.3")) {
+            val enFile = File(rootDir, "changelogs/$tag.md")
+            val zhFile = File(rootDir, "locales/changelogs/$tag.zh-CN.md")
+            assertTrue("Missing English changelog: ${enFile.absolutePath}", enFile.isFile)
+            assertTrue("Missing Chinese changelog: ${zhFile.absolutePath}", zhFile.isFile)
 
-        val enText = enFile.readText(Charsets.UTF_8)
-        val zhText = zhFile.readText(Charsets.UTF_8)
+            val enText = enFile.readText(Charsets.UTF_8)
+            val zhText = zhFile.readText(Charsets.UTF_8)
 
-        // English release notes must be 100% pure English with Alpha live streaming warning & standard sections
-        assertFalse("English release notes must not contain CJK characters", cjkRegex.containsMatchIn(enText))
-        val enBlocks = ReleaseNotesParser.parseBlocks(enText)
-        val enWarn = enBlocks.filterIsInstance<MdBlock.Alert>().firstOrNull { it.kind == MdAlertKind.WARNING }
-        assertTrue("English release notes must include [!WARNING] for Alpha Live Streaming", enWarn != null)
-        assertTrue(enWarn!!.lines.joinToString(" ").contains("unstable Alpha", ignoreCase = true))
+            // English release notes must be 100% pure English with Alpha live streaming warning & standard sections
+            assertFalse("English release notes ($tag) must not contain CJK characters", cjkRegex.containsMatchIn(enText))
+            val enBlocks = ReleaseNotesParser.parseBlocks(enText)
+            val enWarn = enBlocks.filterIsInstance<MdBlock.Alert>().firstOrNull { it.kind == MdAlertKind.WARNING }
+            assertTrue("English release notes ($tag) must include [!WARNING] for Alpha Live Streaming", enWarn != null)
+            assertTrue(enWarn!!.lines.joinToString(" ").contains("unstable Alpha", ignoreCase = true))
 
-        val enHeadings = enBlocks.filterIsInstance<MdBlock.Heading>().map { it.text }
-        assertEquals(listOf("Added", "Changed", "Fixed"), enHeadings)
+            val enHeadings = enBlocks.filterIsInstance<MdBlock.Heading>().map { it.text }
+            assertEquals(listOf("Added", "Changed", "Fixed"), enHeadings)
 
-        // Chinese release notes must contain localized Chinese and matching [!WARNING] block
-        assertTrue(cjkRegex.containsMatchIn(zhText))
-        val zhBlocks = ReleaseNotesParser.parseBlocks(zhText)
-        val zhWarn = zhBlocks.filterIsInstance<MdBlock.Alert>().firstOrNull { it.kind == MdAlertKind.WARNING }
-        assertTrue("Chinese release notes must include [!WARNING] for Alpha Live Streaming", zhWarn != null)
-        assertTrue(zhWarn!!.lines.joinToString(" ").contains("Alpha 不稳定测试"))
+            // Chinese release notes must contain localized Chinese and matching [!WARNING] block
+            assertTrue(cjkRegex.containsMatchIn(zhText))
+            val zhBlocks = ReleaseNotesParser.parseBlocks(zhText)
+            val zhWarn = zhBlocks.filterIsInstance<MdBlock.Alert>().firstOrNull { it.kind == MdAlertKind.WARNING }
+            assertTrue("Chinese release notes ($tag) must include [!WARNING] for Alpha Live Streaming", zhWarn != null)
+            assertTrue(zhWarn!!.lines.joinToString(" ").contains("Alpha 不稳定测试"))
+        }
     }
 }
