@@ -30,13 +30,13 @@ val resolvedVersionName: String = (findProperty("versionName") as? String)
     ?.trim()
     ?.removePrefix("v")
     ?.takeIf { it.isNotBlank() }
-    ?: "0.1.0-alpha.3"
+    ?: "0.1.0-alpha.4"
 
 val resolvedVersionCode: Int = (findProperty("versionCode") as? String)
     ?.trim()
     ?.toIntOrNull()
     ?.takeIf { it > 0 }
-    ?: 10003
+    ?: 10004
 
 val configuredTargetAbis: List<String> = ((findProperty("targetAbis") as? String)
     ?.split(',')

@@ -90,7 +90,7 @@ class ReleaseNotesParserTest {
         val rootDir = File("..").canonicalFile.takeIf { File(it, "changelogs").exists() }
             ?: File(".").canonicalFile
 
-        for (tag in listOf("v0.1.0-alpha.2", "v0.1.0-alpha.3")) {
+        for (tag in listOf("v0.1.0-alpha.2", "v0.1.0-alpha.3", "v0.1.0-alpha.4")) {
             val enFile = File(rootDir, "changelogs/$tag.md")
             val zhFile = File(rootDir, "locales/changelogs/$tag.zh-CN.md")
             assertTrue("Missing English changelog: ${enFile.absolutePath}", enFile.isFile)
