@@ -15,6 +15,7 @@ import com.cloudwhile.tscc.data.model.ServerSnapshot
 import com.cloudwhile.tscc.data.model.VoiceMode
 import com.cloudwhile.tscc.ui.screens.bookmarks.BookmarksScreen
 import com.cloudwhile.tscc.ui.screens.identities.IdentitiesScreen
+import com.cloudwhile.tscc.ui.screens.onboarding.OnboardingScreen
 import com.cloudwhile.tscc.ui.screens.room.ServerRoomScreen
 import com.cloudwhile.tscc.ui.screens.settings.SettingsScreen
 import com.cloudwhile.tscc.ui.theme.TsccTheme
@@ -86,17 +87,16 @@ fun ServerRoomScreenPreview() {
     val sampleSnap = ServerSnapshot(
         sessionId = 1,
         serverName = "North Studio · 语音空间",
-        myClientId = 10,
         serverAddress = "voice.studio.cn:9987",
         welcomeMessage = "欢迎加入 [b]North Studio[/b] 语音空间！",
         platform = "Linux",
         version = "3.13.7",
         uptimeSec = 93_600L,
+        myClientId = 10,
         myChannelId = 2,
         maxClients = 64,
         pingMs = 24,
         packetLossPct = 0.0f,
-        channels = listOf(
         serverGroups = listOf(
             ServerGroupInfo(id = 6, name = "Server Admin", iconId = 300, sortId = 10, namingMode = 1),
             ServerGroupInfo(id = 7, name = "VIP", iconId = 200, sortId = 20)
@@ -104,6 +104,7 @@ fun ServerRoomScreenPreview() {
         channelGroups = listOf(
             ChannelGroupInfo(id = 5, name = "Channel Admin", iconId = 100, sortId = 10)
         ),
+        channels = listOf(
             ChannelNode(id = 1, parentId = 0, order = 0, name = "公共接待大厅", isDefault = true),
             ChannelNode(
                 id = 2,
@@ -260,6 +261,36 @@ fun SettingsScreenPreview() {
             onDeleteIdentity = {},
             onClearAllAppData = {},
             onShowMessage = {}
+        )
+    }
+}
+
+@Preview(name = "First-Run Onboarding", showBackground = true, widthDp = 390, heightDp = 820)
+@Composable
+fun OnboardingScreenPreview() {
+    TsccTheme(darkTheme = true) {
+        OnboardingScreen(
+            settings = AppSettings(onboardingCompleted = false, isLoaded = true),
+            identities = listOf(
+                IdentityEntity(
+                    id = 1,
+                    name = "默认身份",
+                    uniqueId = "lks7QL5OVMKo4pZ79cEOI5r5oEA=",
+                    publicKeyBase64 = "",
+                    iniPayload = "",
+                    securityLevel = 8,
+                    isDefault = true
+                )
+            ),
+            hasMicPermission = true,
+            onUpdateLanguage = {},
+            onUpdateDarkTheme = {},
+            onUpdateNickname = {},
+            onImportIdentityAsDefault = { _, _ -> },
+            onSelectVoiceMode = {},
+            onPermissionsUpdated = {},
+            onShowMessage = {},
+            onComplete = {}
         )
     }
 }

@@ -61,6 +61,7 @@ import com.cloudwhile.tscc.ui.components.AppTopToast
 import com.cloudwhile.tscc.ui.components.AppUpdateDialog
 import com.cloudwhile.tscc.ui.components.LaunchSplashOverlay
 import com.cloudwhile.tscc.ui.screens.bookmarks.BookmarksScreen
+import com.cloudwhile.tscc.ui.screens.onboarding.OnboardingScreen
 import com.cloudwhile.tscc.ui.screens.room.IncomingPokeDialog
 import com.cloudwhile.tscc.ui.screens.room.ServerRoomScreen
 import com.cloudwhile.tscc.ui.screens.settings.SettingsScreen
@@ -125,7 +126,6 @@ private fun MainAppShell(viewModel: MainViewModel) {
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var showLaunchSplash by rememberSaveable { mutableStateOf(true) }
-    var hasRequestedStartupPerms by rememberSaveable { mutableStateOf(false) }
     var hasCheckedStartupUpdate by rememberSaveable { mutableStateOf(false) }
     var pendingInstallAfterPermGrant by remember { mutableStateOf(false) }
     var currentTab by rememberSaveable { mutableStateOf(MainTab.BOOKMARKS) }
@@ -137,6 +137,8 @@ private fun MainAppShell(viewModel: MainViewModel) {
     var showManualMicSettingsDialog by remember { mutableStateOf(false) }
 
     val settings by viewModel.settings.collectAsState()
+    val identities by viewModel.identities.collectAsState()
+    val hasMicPermission by viewModel.hasMicPermission.collectAsState()
     val updateState by viewModel.updateState.collectAsState()
     val connectionStatus by viewModel.connectionStatus.collectAsState()
     val manualDisconnectSeq by viewModel.manualDisconnectSeq.collectAsState()
@@ -156,12 +158,6 @@ private fun MainAppShell(viewModel: MainViewModel) {
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    val startupPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) {
-        viewModel.refreshMicPermission()
     }
 
     val installPermLauncher = rememberLauncherForActivityResult(
@@ -196,8 +192,8 @@ private fun MainAppShell(viewModel: MainViewModel) {
         }
     }
 
-    LaunchedEffect(settings.autoCheckUpdates) {
-        if (!hasCheckedStartupUpdate && settings.autoCheckUpdates) {
+    LaunchedEffect(settings.isLoaded, settings.onboardingCompleted, settings.autoCheckUpdates) {
+        if (settings.isLoaded && settings.onboardingCompleted && !hasCheckedStartupUpdate && settings.autoCheckUpdates) {
             delay(1600L)
             hasCheckedStartupUpdate = true
             viewModel.checkForUpdates(manual = false)
@@ -233,21 +229,7 @@ private fun MainAppShell(viewModel: MainViewModel) {
     }
 
     LaunchedEffect(Unit) {
-        if (!hasRequestedStartupPerms) {
-            hasRequestedStartupPerms = true
-            val perms = buildList {
-                add(Manifest.permission.RECORD_AUDIO)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    add(Manifest.permission.BLUETOOTH_CONNECT)
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    add(Manifest.permission.POST_NOTIFICATIONS)
-                }
-            }
-            startupPermissionLauncher.launch(perms.toTypedArray())
-        } else {
-            viewModel.refreshMicPermission()
-        }
+        viewModel.refreshMicPermission()
     }
 
     LaunchedEffect(micPermissionRequestSeq) {
@@ -353,41 +335,61 @@ private fun MainAppShell(viewModel: MainViewModel) {
         )
     }
 
+    val showOnboarding = settings.isLoaded && !settings.onboardingCompleted
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.canvas)
     ) {
-        Scaffold(
-            containerColor = colors.canvas,
-            bottomBar = {
-                AppPillBottomBar(
-                    items = navItems,
-                    selected = currentTab,
-                    onSelect = { currentTab = it }
-                )
-            }
-        ) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .graphicsLayer {
-                        alpha = tabAlpha.value
-                        translationX = tabTranslateX.value
+        if (showOnboarding) {
+            OnboardingScreen(
+                settings = settings,
+                identities = identities,
+                hasMicPermission = hasMicPermission,
+                onUpdateLanguage = viewModel::updateAppLanguage,
+                onUpdateDarkTheme = viewModel::updateDarkTheme,
+                onUpdateNickname = viewModel::updateDefaultNickname,
+                onImportIdentityAsDefault = { name, rawIni ->
+                    viewModel.importIdentity(name, rawIni, makeDefault = true)
+                },
+                onSelectVoiceMode = viewModel::updateVoiceMode,
+                onPermissionsUpdated = { viewModel.refreshMicPermission() },
+                onShowMessage = { viewModel.showToast(it) },
+                onComplete = viewModel::completeOnboarding
+            )
+        } else {
+            Scaffold(
+                containerColor = colors.canvas,
+                bottomBar = {
+                    AppPillBottomBar(
+                        items = navItems,
+                        selected = currentTab,
+                        onSelect = { currentTab = it }
+                    )
+                }
+            ) { innerPadding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .graphicsLayer {
+                            alpha = tabAlpha.value
+                            translationX = tabTranslateX.value
+                        }
+                ) {
+                    when (currentTab) {
+                        MainTab.BOOKMARKS -> BookmarksTabHost(
+                            viewModel = viewModel,
+                            onNavigateToRoom = { currentTab = MainTab.ROOM }
+                        )
+                        MainTab.ROOM -> RoomTabHost(
+                            viewModel = viewModel,
+                            openTokenDialogSeq = openTokenDialogSeq,
+                            onNavigateToBookmarks = { currentTab = MainTab.BOOKMARKS }
+                        )
+                        MainTab.SETTINGS -> SettingsTabHost(viewModel = viewModel)
                     }
-            ) {
-                when (currentTab) {
-                    MainTab.BOOKMARKS -> BookmarksTabHost(
-                        viewModel = viewModel,
-                        onNavigateToRoom = { currentTab = MainTab.ROOM }
-                    )
-                    MainTab.ROOM -> RoomTabHost(
-                        viewModel = viewModel,
-                        openTokenDialogSeq = openTokenDialogSeq,
-                        onNavigateToBookmarks = { currentTab = MainTab.BOOKMARKS }
-                    )
-                    MainTab.SETTINGS -> SettingsTabHost(viewModel = viewModel)
                 }
             }
         }
@@ -712,8 +714,6 @@ private fun RoomTabHost(
         },
         onKickClient = viewModel.repository::kickClient,
         onBanClient = viewModel.repository::banClient,
-        onOpenDeepLink = viewModel::handleIncomingDeepLink
-    )
         onRequestServerVariables = viewModel.repository::requestServerVariables,
         onRequestClientDetails = viewModel.repository::requestClientDetails,
         onUpdateSelfServerNickname = viewModel.repository::updateSelfServerNickname,
@@ -723,6 +723,8 @@ private fun RoomTabHost(
         onSetClientServerGroup = viewModel.repository::setClientServerGroup,
         onSetClientChannelGroup = viewModel.repository::setClientChannelGroup,
         onShowMessage = { viewModel.showToast(it) },
+        onOpenDeepLink = viewModel::handleIncomingDeepLink
+    )
 }
 
 @Composable

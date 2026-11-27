@@ -27,7 +27,9 @@ data class AppSettings(
     val darkTheme: Boolean = true,
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val autoCheckUpdates: Boolean = true,
-    val skippedUpdateVersion: String = ""
+    val skippedUpdateVersion: String = "",
+    val onboardingCompleted: Boolean = true,
+    val isLoaded: Boolean = false
 )
 
 class SettingsRepository(private val context: Context) {
@@ -46,9 +48,12 @@ class SettingsRepository(private val context: Context) {
         val APP_LANGUAGE = stringPreferencesKey("app_language")
         val AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
         val SKIPPED_UPDATE_VERSION = stringPreferencesKey("skipped_update_version")
+        val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
     }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
+        val explicitOnboarding = prefs[Keys.ONBOARDING_COMPLETED]
+        val hasExistingUserPrefs = prefs[Keys.DEFAULT_NICKNAME] != null || prefs[Keys.VOICE_MODE] != null
         AppSettings(
             defaultNickname = prefs[Keys.DEFAULT_NICKNAME] ?: "TSCC_Player",
             voiceMode = VoiceMode.fromCode(prefs[Keys.VOICE_MODE] ?: VoiceMode.VAD.code),
@@ -62,7 +67,9 @@ class SettingsRepository(private val context: Context) {
             darkTheme = prefs[Keys.DARK_THEME] ?: true,
             appLanguage = AppLanguage.fromCode(prefs[Keys.APP_LANGUAGE]),
             autoCheckUpdates = prefs[Keys.AUTO_CHECK_UPDATES] ?: true,
-            skippedUpdateVersion = prefs[Keys.SKIPPED_UPDATE_VERSION].orEmpty()
+            skippedUpdateVersion = prefs[Keys.SKIPPED_UPDATE_VERSION].orEmpty(),
+            onboardingCompleted = explicitOnboarding ?: hasExistingUserPrefs,
+            isLoaded = true
         )
     }
 
@@ -112,6 +119,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setSkippedUpdateVersion(version: String) {
         context.dataStore.edit { it[Keys.SKIPPED_UPDATE_VERSION] = version.trim() }
+    }
+
+    suspend fun setOnboardingCompleted(completed: Boolean) {
+        context.dataStore.edit { it[Keys.ONBOARDING_COMPLETED] = completed }
     }
 
     suspend fun clearAllSettings() {

@@ -202,10 +202,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun importIdentity(name: String, rawIniOrKey: String) {
+    fun importIdentity(name: String, rawIniOrKey: String, makeDefault: Boolean = false) {
         viewModelScope.launch {
             val en = repository.isEnglish()
-            repository.importIdentityIni(name, rawIniOrKey)
+            repository.importIdentityIni(name, rawIniOrKey, makeDefault = makeDefault)
                 .onSuccess {
                     showToast(
                         if (en) {
@@ -318,6 +318,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateAutoCheckUpdates(enabled: Boolean) {
         viewModelScope.launch { settingsRepo.setAutoCheckUpdates(enabled) }
+    }
+
+    fun completeOnboarding() {
+        viewModelScope.launch { settingsRepo.setOnboardingCompleted(true) }
     }
 
     fun checkForUpdates(manual: Boolean) {

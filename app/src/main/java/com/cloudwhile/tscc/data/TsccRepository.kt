@@ -617,10 +617,15 @@ class TsccRepository(
         }
     }
 
-    suspend fun importIdentityIni(name: String, rawIniOrKey: String): Result<IdentityEntity> =
+    suspend fun importIdentityIni(
+        name: String,
+        rawIniOrKey: String,
+        makeDefault: Boolean = false
+    ): Result<IdentityEntity> =
         withContext(Dispatchers.IO) {
             NativeBridge.inspectIdentityIni(rawIniOrKey).map { info ->
                 val hasAny = db.identityDao().getAll().isNotEmpty()
+                val shouldBeDefault = !hasAny || makeDefault
                 val fallbackName = if (isEnglish()) {
                     "Imported (${info.uniqueId.take(6)})"
                 } else {
@@ -635,7 +640,10 @@ class TsccRepository(
                     isDefault = shouldBeDefault
                 )
                 val id = db.identityDao().insert(plainEntity.encrypted())
-                plainEntity.copy(id = id)
+                if (makeDefault && hasAny) {
+                    db.identityDao().setDefaultIdentity(id)
+                }
+                plainEntity.copy(id = id, isDefault = shouldBeDefault)
             }
         }
 
@@ -934,14 +942,6 @@ class TsccRepository(
         lastBlockedSpeechHintMs = 0L
     }
 
-            if (explicitPassword.isNotEmpty()) {
-                sessionChannelPasswords[channel.id] = explicitPassword
-            }
-            _passwordPrompt.value = null
-            switchChannel(channel.id, explicitPassword)
-            return
-        }
-
     private fun stopVoiceService() {
         val stopIntent = Intent(context, VoiceCallService::class.java).apply {
             action = VoiceCallService.ACTION_STOP_CALL
@@ -956,6 +956,14 @@ class TsccRepository(
         if (channel.id == _serverSnapshot.value.myChannelId) return
 
         if (explicitPassword != null) {
+            if (explicitPassword.isNotEmpty()) {
+                sessionChannelPasswords[channel.id] = explicitPassword
+            }
+            _passwordPrompt.value = null
+            switchChannel(channel.id, explicitPassword)
+            return
+        }
+
         if (!channel.hasPassword) {
             switchChannel(channel.id, "")
             return
@@ -1361,14 +1369,6 @@ class TsccRepository(
         }
     }
 
-    // --- Full Application Reset ---
-
-    suspend fun clearAllAppData(): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            if (_isLoopbackTesting.value) {
-                setLoopbackTesting(false)
-            }
-            if (_connectionStatus.value != ConnectionStatus.DISCONNECTED) {
     fun requestServerVariables() {
         if (!NativeBridge.ensureLoaded()) return
         repoScope.launch {
@@ -1448,6 +1448,14 @@ class TsccRepository(
         }
     }
 
+    // --- Full Application Reset ---
+
+    suspend fun clearAllAppData(): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (_isLoopbackTesting.value) {
+                setLoopbackTesting(false)
+            }
+            if (_connectionStatus.value != ConnectionStatus.DISCONNECTED) {
                 disconnect(if (isEnglish()) "Clear app data" else "清除应用数据", manual = true)
             }
             cancelSecurityUpgrade()
@@ -1477,6 +1485,9 @@ class TsccRepository(
         val iconIds = buildSet {
             if (snap.serverIconId != 0L) add(snap.serverIconId)
             snap.channels.forEach { if (it.iconId != 0L) add(it.iconId) }
+            snap.clients.forEach { if (it.iconId != 0L) add(it.iconId) }
+            snap.serverGroups.forEach { if (it.iconId != 0L) add(it.iconId) }
+            snap.channelGroups.forEach { if (it.iconId != 0L) add(it.iconId) }
         }
         for (rawIconId in iconIds) {
             val unsignedId = rawIconId and 0xFFFFFFFFL
@@ -1484,10 +1495,8 @@ class TsccRepository(
             val key = "icon_$unsignedId"
             val dest = File(iconDir, "$key.png")
             if (dest.exists() && dest.length() > 0) {
+                TsIconCodec.normalizeIconFileInPlace(dest)
                 if (!_iconCachePaths.value.containsKey(key)) {
-            snap.clients.forEach { if (it.iconId != 0L) add(it.iconId) }
-            snap.serverGroups.forEach { if (it.iconId != 0L) add(it.iconId) }
-            snap.channelGroups.forEach { if (it.iconId != 0L) add(it.iconId) }
                     _iconCachePaths.update { it + (key to dest.absolutePath) }
                 }
             } else if (requestedIconKeys.add(key)) {
@@ -1495,7 +1504,6 @@ class TsccRepository(
             }
         }
 
-                TsIconCodec.normalizeIconFileInPlace(dest)
         for (c in snap.clients) {
             if (c.avatarFlag.isNotBlank() && c.uid.isNotBlank()) {
                 val avatarName = uidToAvatarFileName(c.uid) ?: continue
