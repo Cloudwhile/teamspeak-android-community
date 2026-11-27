@@ -436,7 +436,7 @@ fun SelfBroadcastingBanner(
             ) {
                 Icon(
                     imageVector = Icons.Default.Cameraswitch,
-                    contentDescription = null,
+                    contentDescription = if (isEnglish) "Switch Camera" else "切换前后摄像头",
                     tint = colors.textPrimary,
                     modifier = Modifier.size(16.dp)
                 )
@@ -513,7 +513,7 @@ fun Ts6LiveStreamViewerStage(
             )
             Icon(
                 imageVector = Icons.Default.Close,
-                contentDescription = null,
+                contentDescription = if (isEnglish) "Close Stream" else "关闭直播画面",
                 tint = colors.textSecondary,
                 modifier = Modifier
                     .size(18.dp)
@@ -750,18 +750,30 @@ private fun ViewerOverlayBar(
             } else {
                 Icons.AutoMirrored.Filled.VolumeUp
             },
+            contentDescription = if (state.streamAudioMuted) {
+                if (isEnglish) "Unmute Stream Audio" else "开启直播声音"
+            } else {
+                if (isEnglish) "Mute Stream Audio" else "静音直播声音"
+            },
             onClick = onToggleMute
         )
         OverlayTinyButton(
             icon = Icons.Default.Minimize,
+            contentDescription = if (isEnglish) "Minimize Stream" else "收起小条模式",
             onClick = onMinimize
         )
         OverlayTinyButton(
             icon = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+            contentDescription = if (isFullscreen) {
+                if (isEnglish) "Exit Fullscreen" else "退出全屏"
+            } else {
+                if (isEnglish) "Fullscreen" else "全屏观看"
+            },
             onClick = onToggleFullscreen
         )
         OverlayTinyButton(
             icon = Icons.Default.Close,
+            contentDescription = if (isEnglish) "Close Stream" else "关闭直播画面",
             tint = Color(0xFFFDA4AF),
             onClick = onClose
         )
@@ -771,6 +783,7 @@ private fun ViewerOverlayBar(
 @Composable
 private fun OverlayTinyButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String?,
     tint: Color = Color.White,
     onClick: () -> Unit
 ) {
@@ -784,7 +797,7 @@ private fun OverlayTinyButton(
     ) {
         Icon(
             imageVector = icon,
-            contentDescription = null,
+            contentDescription = contentDescription,
             tint = tint,
             modifier = Modifier.size(15.dp)
         )

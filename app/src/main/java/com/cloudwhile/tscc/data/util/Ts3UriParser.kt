@@ -90,7 +90,7 @@ object Ts3UriParser {
                 if (pair.isBlank()) continue
                 val eq = pair.indexOf('=')
                 if (eq > 0) {
-                    val k = decode(pair.substring(0, eq)).lowercase()
+                    val k = decode(pair.substring(0, eq)).lowercase(java.util.Locale.ROOT)
                     val v = decode(pair.substring(eq + 1))
                     params[k] = v
                 }

@@ -25,10 +25,12 @@ enum class VoiceMode(val code: Int, val label: String, val labelEn: String) {
     }
 }
 
-enum class AppLanguage(val code: String, val displayLabel: String) {
-    SYSTEM("system", "跟随系统 / Auto"),
-    ZH_CN("zh", "简体中文"),
-    EN("en", "English");
+enum class AppLanguage(val code: String, val displayLabel: String, val displayLabelEn: String) {
+    SYSTEM("system", "跟随系统", "System"),
+    ZH_CN("zh", "简体中文", "简体中文"),
+    EN("en", "English", "English");
+
+    fun localizedLabel(isEn: Boolean): String = if (isEn) displayLabelEn else displayLabel
 
     companion object {
         fun fromCode(code: String?): AppLanguage =

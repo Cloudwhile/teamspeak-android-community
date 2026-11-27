@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import androidx.core.content.ContextCompat
+import com.cloudwhile.tscc.TsccApp
 import com.cloudwhile.tscc.data.db.AppDatabase
 import com.cloudwhile.tscc.data.db.BookmarkEntity
 import com.cloudwhile.tscc.data.db.IdentityEntity
@@ -55,6 +56,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 private fun BookmarkEntity.encrypted(): BookmarkEntity = copy(
@@ -224,8 +226,18 @@ class TsccRepository(
     private fun syncLanguageToNative(settings: AppSettings) {
         val en = resolveAppStrings(settings.appLanguage).isEnglish
         liveStreamManager.isEnglish = en
-        if (NativeBridge.ensureLoaded()) {
-            NativeBridge.nativeSetLanguage(en)
+        NativeBridge.setLanguage(en)
+        (context.applicationContext as? TsccApp)?.syncNotificationChannels(settings.appLanguage)
+        repoScope.launch {
+            syncBuiltinDefaultIdentityName(en)
+        }
+    }
+
+    private suspend fun syncBuiltinDefaultIdentityName(isEnglish: Boolean) {
+        val def = db.identityDao().getDefault()?.decrypted() ?: return
+        val wantName = if (isEnglish) "Default Identity" else "默认身份"
+        if ((def.name == "默认身份" || def.name == "Default Identity") && def.name != wantName) {
+            db.identityDao().update(def.copy(name = wantName).encrypted())
         }
     }
 
@@ -317,7 +329,7 @@ class TsccRepository(
         when (env.kind) {
             "connection_state" -> {
                 val prevStatus = _connectionStatus.value
-                val nextStatus = when (env.status?.uppercase()) {
+                val nextStatus = when (env.status?.uppercase(Locale.ROOT)) {
                     "CONNECTING" -> ConnectionStatus.CONNECTING
                     "CONNECTED" -> ConnectionStatus.CONNECTED
                     "RECONNECTING" -> ConnectionStatus.RECONNECTING

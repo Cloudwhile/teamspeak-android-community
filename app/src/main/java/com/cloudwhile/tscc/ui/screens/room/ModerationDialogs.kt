@@ -154,7 +154,7 @@ fun PrivilegeKeyDialog(
         AppCapsuleField(
             value = token,
             onValueChange = { token = it },
-            label = "Privilege Key",
+            label = strings.quickTokenTitle,
             placeholder = if (strings.isEnglish) "Paste privilege token..." else "粘贴权限密钥串..."
         )
     }

@@ -153,7 +153,7 @@ class AppUpdateManager(private val context: Context) {
             data class Num(val value: Long) : PreToken
         }
 
-        private fun stageRank(label: String): Int = when (label.lowercase()) {
+        private fun stageRank(label: String): Int = when (label.lowercase(java.util.Locale.ROOT)) {
             "dev", "snapshot", "nightly" -> 0
             "alpha", "a" -> 1
             "beta", "b" -> 2
@@ -170,7 +170,7 @@ class AppUpdateManager(private val context: Context) {
                     val alpha = m.groupValues[1]
                     val digits = m.groupValues[2]
                     if (alpha.isNotEmpty()) {
-                        out.add(PreToken.Str(alpha.lowercase(), stageRank(alpha)))
+                        out.add(PreToken.Str(alpha.lowercase(java.util.Locale.ROOT), stageRank(alpha)))
                     } else if (digits.isNotEmpty()) {
                         out.add(PreToken.Num(digits.toLongOrNull() ?: 0L))
                     }
@@ -279,7 +279,7 @@ class AppUpdateManager(private val context: Context) {
         checkJob?.cancel()
         checkJob = scope.launch {
             _state.update { it.copy(status = UpdateStatus.CHECKING, errorMessage = null) }
-            val result = withContext(Dispatchers.IO) { fetchLatestRelease() }
+            val result = withContext(Dispatchers.IO) { fetchLatestRelease(isEnglish) }
             result.fold(
                 onSuccess = { latest ->
                     if (latest == null) {
@@ -500,8 +500,8 @@ class AppUpdateManager(private val context: Context) {
         return if (f.length() > 0L) f else null
     }
 
-    private fun fetchLatestRelease(): Result<ReleaseUpdateInfo?> = runCatching {
-        val rawJson = httpGetText(RELEASES_API_URL)
+    private fun fetchLatestRelease(isEnglish: Boolean): Result<ReleaseUpdateInfo?> = runCatching {
+        val rawJson = httpGetText(RELEASES_API_URL, isEnglish)
         val arr = json.parseToJsonElement(rawJson) as? JsonArray ?: return@runCatching null
         val supportedAbis = Build.SUPPORTED_ABIS?.toList().orEmpty()
 
@@ -569,15 +569,21 @@ class AppUpdateManager(private val context: Context) {
 
         val expectedSha256 = release.sha256SumsUrl?.let { sumsUrl ->
             runCatching {
-                parseExpectedSha256(httpGetText(sumsUrl), asset.name)
+                parseExpectedSha256(httpGetText(sumsUrl, isEnglish), asset.name)
             }.getOrNull()
         }
 
-        val conn = openFollowingRedirects(asset.downloadUrl, accept = "application/octet-stream")
+        val conn = openFollowingRedirects(
+            urlString = asset.downloadUrl,
+            accept = "application/octet-stream",
+            isEnglish = isEnglish
+        )
         try {
             val code = conn.responseCode
             if (code !in 200..299) {
-                throw IllegalStateException("HTTP $code")
+                throw IllegalStateException(
+                    if (isEnglish) "HTTP error $code" else "HTTP 状态异常 ($code)"
+                )
             }
             val total = conn.contentLengthLong.takeIf { it > 0L } ?: asset.sizeBytes
             var downloaded = 0L
@@ -656,15 +662,21 @@ class AppUpdateManager(private val context: Context) {
                 digest.update(buf, 0, n)
             }
         }
-        return digest.digest().joinToString("") { "%02x".format(it) }
+        return formatBytesHexLower(digest.digest())
     }
 
-    private fun httpGetText(urlString: String): String {
-        val conn = openFollowingRedirects(urlString, accept = "application/vnd.github+json")
+    private fun httpGetText(urlString: String, isEnglish: Boolean): String {
+        val conn = openFollowingRedirects(
+            urlString = urlString,
+            accept = "application/vnd.github+json",
+            isEnglish = isEnglish
+        )
         return try {
             val code = conn.responseCode
             if (code !in 200..299) {
-                throw IllegalStateException("HTTP $code")
+                throw IllegalStateException(
+                    if (isEnglish) "HTTP error $code" else "HTTP 状态异常 ($code)"
+                )
             }
             conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
         } finally {
@@ -672,7 +684,11 @@ class AppUpdateManager(private val context: Context) {
         }
     }
 
-    private fun openFollowingRedirects(urlString: String, accept: String): HttpURLConnection {
+    private fun openFollowingRedirects(
+        urlString: String,
+        accept: String,
+        isEnglish: Boolean
+    ): HttpURLConnection {
         var currentUrl = urlString
         for (hop in 0..5) {
             val conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
@@ -693,6 +709,11 @@ class AppUpdateManager(private val context: Context) {
             }
             return conn
         }
-        throw IllegalStateException("Too many HTTP redirects")
+        throw IllegalStateException(
+            if (isEnglish) "Too many HTTP redirects" else "HTTP 重定向次数过多"
+        )
     }
 }
+
+internal fun formatBytesHexLower(bytes: ByteArray): String =
+    bytes.joinToString("") { java.lang.String.format(java.util.Locale.ROOT, "%02x", it.toInt() and 0xFF) }

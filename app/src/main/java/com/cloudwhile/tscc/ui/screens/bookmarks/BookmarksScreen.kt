@@ -160,7 +160,7 @@ fun BookmarksScreen(
                             {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = null,
+                                    contentDescription = strings.clearInputDesc,
                                     tint = colors.textSecondary,
                                     modifier = Modifier
                                         .size(18.dp)
@@ -565,7 +565,11 @@ private fun BookmarkCard(
                     } else {
                         Icons.Default.Visibility
                     },
-                    contentDescription = null,
+                    contentDescription = if (showPasswordPlain) {
+                        strings.hidePasswordDesc
+                    } else {
+                        strings.showPasswordDesc
+                    },
                     tint = primaryInk,
                     modifier = Modifier
                         .size(16.dp)
@@ -729,7 +733,11 @@ private fun BookmarkEditDialog(
                     } else {
                         Icons.Default.Visibility
                     },
-                    contentDescription = null,
+                    contentDescription = if (passwordVisible) {
+                        strings.hidePasswordDesc
+                    } else {
+                        strings.showPasswordDesc
+                    },
                     tint = colors.textSecondary,
                     modifier = Modifier
                         .size(18.dp)

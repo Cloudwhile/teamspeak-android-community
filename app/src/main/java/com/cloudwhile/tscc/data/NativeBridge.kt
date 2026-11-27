@@ -32,6 +32,9 @@ object NativeBridge : NativeEventCallback {
     )
     val events: SharedFlow<CoreEventEnvelope> = _events.asSharedFlow()
 
+    @Volatile
+    private var isEnglishLang: Boolean = false
+
     val isNativeLoaded: Boolean by lazy {
         try {
             System.loadLibrary("tscc_core")
@@ -54,20 +57,30 @@ object NativeBridge : NativeEventCallback {
         }
     }
 
+    fun setLanguage(isEnglish: Boolean) {
+        isEnglishLang = isEnglish
+        if (ensureLoaded()) {
+            nativeSetLanguage(isEnglish)
+        }
+    }
+
+    private fun nativeNotLoadedMessage(): String =
+        if (isEnglishLang) "Native protocol library is not loaded" else "原生协议库尚未加载"
+
     fun generateIdentity(): Result<IdentityInfo> = runCatching {
-        check(ensureLoaded()) { "原生协议库尚未加载" }
+        check(ensureLoaded()) { nativeNotLoadedMessage() }
         val raw = nativeGenerateIdentity()
         decodeResultJson(raw)
     }
 
     fun inspectIdentityIni(iniOrRawKey: String): Result<IdentityInfo> = runCatching {
-        check(ensureLoaded()) { "原生协议库尚未加载" }
+        check(ensureLoaded()) { nativeNotLoadedMessage() }
         val raw = nativeInspectIdentityIni(iniOrRawKey)
         decodeResultJson(raw)
     }
 
     fun upgradeSecurityLevel(iniOrRawKey: String, targetLevel: Int): Result<IdentityInfo> = runCatching {
-        check(ensureLoaded()) { "原生协议库尚未加载" }
+        check(ensureLoaded()) { nativeNotLoadedMessage() }
         val raw = nativeUpgradeSecurityLevel(iniOrRawKey, targetLevel)
         decodeResultJson(raw)
     }

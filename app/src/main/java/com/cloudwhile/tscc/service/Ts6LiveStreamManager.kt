@@ -191,7 +191,7 @@ class Ts6LiveStreamManager(
             return if (filtered.isEmpty()) "" else filtered.joinToString("\r\n", postfix = "\r\n")
         }
 
-        internal fun videoCodecPriorityRank(codecName: String): Int = when (codecName.uppercase()) {
+        internal fun videoCodecPriorityRank(codecName: String): Int = when (codecName.uppercase(java.util.Locale.ROOT)) {
             "H264" -> 0
             "VP8" -> 1
             "VP9" -> 2
@@ -235,7 +235,7 @@ class Ts6LiveStreamManager(
                             val pt = body.substringBefore(' ').trim()
                             val encoding = body.substringAfter(' ', "").substringBefore('/').trim()
                             if (pt.isNotEmpty() && encoding.isNotEmpty()) {
-                                rtpmapCodec[pt] = encoding.uppercase()
+                                rtpmapCodec[pt] = encoding.uppercase(java.util.Locale.ROOT)
                             }
                         } else if (ln.startsWith("a=fmtp:", ignoreCase = true)) {
                             val body = ln.substringAfter(':').trim()
@@ -338,7 +338,7 @@ class Ts6LiveStreamManager(
                     if (ln.startsWith("a=rtpmap:", ignoreCase = true)) {
                         val body = ln.substringAfter(':').trim()
                         val pt = body.substringBefore(' ').trim()
-                        val codec = body.substringAfter(' ', "").substringBefore('/').trim().uppercase()
+                        val codec = body.substringAfter(' ', "").substringBefore('/').trim().uppercase(java.util.Locale.ROOT)
                         if (codec in setOf("H264", "VP8", "VP9", "AV1")) {
                             primaryVideoPts.add(pt)
                         }
@@ -816,7 +816,7 @@ class Ts6LiveStreamManager(
             expectedHostname: String? = null
         ): String? {
             if (length < 12) return null
-            val expected = expectedHostname?.trim()?.trimEnd('.')?.lowercase()?.takeIf { it.isNotEmpty() }
+            val expected = expectedHostname?.trim()?.trimEnd('.')?.lowercase(java.util.Locale.ROOT)?.takeIf { it.isNotEmpty() }
             val qdCount = ((buf[4].toInt() and 0xFF) shl 8) or (buf[5].toInt() and 0xFF)
             val anCount = ((buf[6].toInt() and 0xFF) shl 8) or (buf[7].toInt() and 0xFF)
             val nsCount = ((buf[8].toInt() and 0xFF) shl 8) or (buf[9].toInt() and 0xFF)
@@ -1229,7 +1229,7 @@ class Ts6LiveStreamManager(
         var result = input
         var allCached = true
         for (host in hosts) {
-            val cached = mdnsCache[host.trim().trimEnd('.').lowercase()]
+            val cached = mdnsCache[host.trim().trimEnd('.').lowercase(java.util.Locale.ROOT)]
             if (!cached.isNullOrEmpty()) {
                 result = result.replace(host, cached)
             } else {
@@ -1240,7 +1240,7 @@ class Ts6LiveStreamManager(
     }
 
     private suspend fun resolveMdnsHost(hostname: String): String? {
-        val key = hostname.trim().trimEnd('.').lowercase()
+        val key = hostname.trim().trimEnd('.').lowercase(java.util.Locale.ROOT)
         if (key.isEmpty()) return null
         mdnsCache[key]?.let { return it }
 
@@ -1392,7 +1392,9 @@ class Ts6LiveStreamManager(
                 streamerClientId = peer.id,
                 streamerName = peer.nickname,
                 streamId = knownStreamId,
-                streamTitle = peer.streamName.ifBlank { "${peer.nickname} LIVE" },
+                streamTitle = peer.streamName.ifBlank {
+                    if (isEnglish) "${peer.nickname}'s Stream" else "${peer.nickname} 的直播"
+                },
                 streamType = if (peer.streamType > 0) peer.streamType else STREAM_TYPE_SCREEN_DEFAULT
             )
 
@@ -1507,7 +1509,14 @@ class Ts6LiveStreamManager(
         val factory = runCatching { ensureFactory() }.getOrElse { err ->
             Log.e(TAG, "WebRTC factory init failed", err)
             _watchingState.update {
-                it.copy(status = LiveWatchStatus.ERROR, errorMessage = "WebRTC 解码引擎初始化失败")
+                it.copy(
+                    status = LiveWatchStatus.ERROR,
+                    errorMessage = if (isEnglish) {
+                        "Failed to initialize WebRTC video decoder"
+                    } else {
+                        "WebRTC 解码引擎初始化失败"
+                    }
+                )
             }
             return null
         }
@@ -1537,7 +1546,11 @@ class Ts6LiveStreamManager(
                                             _watchingState.update {
                                                 it.copy(
                                                     status = LiveWatchStatus.ERROR,
-                                                    errorMessage = "P2P 通道已连通，但未收到对端视频帧（请尝试重试）"
+                                                    errorMessage = if (isEnglish) {
+                                                        "P2P channel connected, but no video frames received (please retry)"
+                                                    } else {
+                                                        "P2P 通道已连通，但未收到对端视频帧（请尝试重试）"
+                                                    }
                                                 )
                                             }
                                         }
@@ -1549,7 +1562,11 @@ class Ts6LiveStreamManager(
                                 _watchingState.update {
                                     it.copy(
                                         status = LiveWatchStatus.ERROR,
-                                        errorMessage = "WebRTC P2P 直连失败（UDP 端口受阻或对端网络不可达）"
+                                        errorMessage = if (isEnglish) {
+                                            "WebRTC P2P direct connection failed (UDP blocked or peer unreachable)"
+                                        } else {
+                                            "WebRTC P2P 直连失败（UDP 端口受阻或对端网络不可达）"
+                                        }
                                     )
                                 }
                             }
@@ -1662,7 +1679,9 @@ class Ts6LiveStreamManager(
                 }
 
                 override fun onSetFailure(error: String?) {
-                    setRemoteOk.complete(error ?: "SDP Offer 解析失败")
+                    setRemoteOk.complete(
+                        error ?: if (isEnglish) "Failed to parse SDP Offer" else "SDP Offer 解析失败"
+                    )
                 }
             },
             SessionDescription(SessionDescription.Type.OFFER, resolvedOfferSdp)
@@ -1673,7 +1692,14 @@ class Ts6LiveStreamManager(
         if (remoteErr != null) {
             Log.e(TAG, "Viewer setRemoteDescription failed: $remoteErr")
             _watchingState.update {
-                it.copy(status = LiveWatchStatus.ERROR, errorMessage = "直播媒体协商失败: $remoteErr")
+                it.copy(
+                    status = LiveWatchStatus.ERROR,
+                    errorMessage = if (isEnglish) {
+                        "Stream media negotiation failed: $remoteErr"
+                    } else {
+                        "直播媒体协商失败: $remoteErr"
+                    }
+                )
             }
             return
         }
@@ -1766,11 +1792,12 @@ class Ts6LiveStreamManager(
         if (!NativeBridge.ensureLoaded()) return
         scope.launch {
             stopBroadcastInternal(notifyServer = true)
+            val fallbackScreenTitle = if (isEnglish) "Screen Share" else "手机屏幕共享"
             _broadcastingState.value = BroadcastingStreamState(
                 isBroadcasting = false,
                 isStarting = true,
                 sourceType = LiveStreamSourceType.SCREEN,
-                streamTitle = title.ifBlank { "Android Screen" },
+                streamTitle = title.ifBlank { fallbackScreenTitle },
                 bitrateKbps = bitrateKbps,
                 width = width,
                 height = height,
@@ -1790,7 +1817,9 @@ class Ts6LiveStreamManager(
                 val factory = ensureFactory()
                 val eglCtx = ensureEglContext()
                 val helper = SurfaceTextureHelper.create("TS6ScreenCapture", eglCtx)
-                    ?: throw IllegalStateException("无法创建 OpenGL 视频采集纹理")
+                    ?: throw IllegalStateException(
+                        if (isEnglish) "Failed to create OpenGL video capture texture" else "无法创建 OpenGL 视频采集纹理"
+                    )
                 val capturer = ScreenCapturerAndroid(
                     projectionResultData,
                     object : MediaProjection.Callback() {
@@ -1817,7 +1846,7 @@ class Ts6LiveStreamManager(
                 _broadcastingState.update { it.copy(isBroadcasting = true, isStarting = false) }
 
                 NativeBridge.nativeSetupStream(
-                    name = title.ifBlank { "Android Screen" },
+                    name = title.ifBlank { fallbackScreenTitle },
                     streamType = LiveStreamSourceType.SCREEN.tsType,
                     bitrateKbps = bitrateKbps,
                     accessibility = STREAM_ACCESS_PUBLIC,
@@ -1827,7 +1856,10 @@ class Ts6LiveStreamManager(
                 )
             }.getOrElse { err ->
                 Log.e(TAG, "Screen share start failed", err)
-                onToast("启动屏幕共享失败: ${err.message}", true)
+                onToast(
+                    if (isEnglish) "Failed to start screen share: ${err.message}" else "启动屏幕共享失败: ${err.message}",
+                    true
+                )
                 false
             }
 
@@ -1848,11 +1880,12 @@ class Ts6LiveStreamManager(
         if (!NativeBridge.ensureLoaded()) return
         scope.launch {
             stopBroadcastInternal(notifyServer = true)
+            val fallbackCameraTitle = if (isEnglish) "Camera Live" else "摄像头直播"
             _broadcastingState.value = BroadcastingStreamState(
                 isBroadcasting = false,
                 isStarting = true,
                 sourceType = LiveStreamSourceType.CAMERA,
-                streamTitle = title.ifBlank { "Camera Live" },
+                streamTitle = title.ifBlank { fallbackCameraTitle },
                 bitrateKbps = bitrateKbps,
                 width = width,
                 height = height,
@@ -1871,15 +1904,21 @@ class Ts6LiveStreamManager(
                 val chosenName = devNames.firstOrNull {
                     if (frontCamera) enumerator.isFrontFacing(it) else enumerator.isBackFacing(it)
                 } ?: devNames.firstOrNull()
-                    ?: throw IllegalStateException("未检测到可用摄像头设备")
+                    ?: throw IllegalStateException(
+                        if (isEnglish) "No available camera device detected" else "未检测到可用摄像头设备"
+                    )
 
                 val capturer = enumerator.createCapturer(chosenName, null)
-                    ?: throw IllegalStateException("初始化摄像头采集器失败")
+                    ?: throw IllegalStateException(
+                        if (isEnglish) "Failed to initialize camera capturer" else "初始化摄像头采集器失败"
+                    )
 
                 val factory = ensureFactory()
                 val eglCtx = ensureEglContext()
                 val helper = SurfaceTextureHelper.create("TS6CameraCapture", eglCtx)
-                    ?: throw IllegalStateException("无法创建摄像头 OpenGL 纹理")
+                    ?: throw IllegalStateException(
+                        if (isEnglish) "Failed to create camera OpenGL texture" else "无法创建摄像头 OpenGL 纹理"
+                    )
                 val src = factory.createVideoSource(false)
                 val pump = StaticFramePumpObserver(src.capturerObserver)
                 capturer.initialize(helper, context, pump)
@@ -1898,7 +1937,7 @@ class Ts6LiveStreamManager(
                 _broadcastingState.update { it.copy(isBroadcasting = true, isStarting = false) }
 
                 NativeBridge.nativeSetupStream(
-                    name = title.ifBlank { "Camera Live" },
+                    name = title.ifBlank { fallbackCameraTitle },
                     streamType = LiveStreamSourceType.CAMERA.tsType,
                     bitrateKbps = bitrateKbps,
                     accessibility = STREAM_ACCESS_PUBLIC,
@@ -1908,7 +1947,10 @@ class Ts6LiveStreamManager(
                 )
             }.getOrElse { err ->
                 Log.e(TAG, "Camera broadcast start failed", err)
-                onToast("启动摄像头直播失败: ${err.message}", true)
+                onToast(
+                    if (isEnglish) "Failed to start camera stream: ${err.message}" else "启动摄像头直播失败: ${err.message}",
+                    true
+                )
                 false
             }
 
@@ -2028,7 +2070,13 @@ class Ts6LiveStreamManager(
         val track = localVideoTrack
         val curBroadcast = _broadcastingState.value
         if (!curBroadcast.isBroadcasting || track == null) {
-            NativeBridge.nativeRespondJoinStreamRequest(streamId, viewerClid, false, "", "直播尚未就绪")
+            NativeBridge.nativeRespondJoinStreamRequest(
+                streamId,
+                viewerClid,
+                false,
+                "",
+                if (isEnglish) "Stream is not ready yet" else "直播尚未就绪"
+            )
             return
         }
 
@@ -2405,7 +2453,9 @@ class Ts6LiveStreamManager(
                         _watchingState.update {
                             it.copy(
                                 status = LiveWatchStatus.ERROR,
-                                errorMessage = sig.message.ifBlank { "主播拒绝了观看请求" }
+                                errorMessage = sig.message.ifBlank {
+                                    if (isEnglish) "Streamer declined the watch request" else "主播拒绝了观看请求"
+                                }
                             )
                         }
                         return@launch
@@ -2454,7 +2504,9 @@ class Ts6LiveStreamManager(
                                 }
 
                                 override fun onSetFailure(error: String?) {
-                                    setAnsOk.complete(error ?: "SDP Answer 解析失败")
+                                    setAnsOk.complete(
+                                        error ?: if (isEnglish) "Failed to parse SDP Answer" else "SDP Answer 解析失败"
+                                    )
                                 }
                             },
                             SessionDescription(SessionDescription.Type.ANSWER, resolvedAnswerSdp)
@@ -2540,7 +2592,9 @@ class Ts6LiveStreamManager(
                         _watchingState.update {
                             it.copy(
                                 status = LiveWatchStatus.ERROR,
-                                errorMessage = item.reason.ifBlank { "主播拒绝了观看请求" }
+                                errorMessage = item.reason.ifBlank {
+                                    if (isEnglish) "Streamer declined the watch request" else "主播拒绝了观看请求"
+                                }
                             )
                         }
                     }

@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">TSCC</string>
-    <string name="notif_channel_voice_name">TSCC 语音通话</string>
-    <string name="notif_channel_voice_desc">保持后台语音频道连接与快捷麦克风控制</string>
-    <string name="notif_channel_alerts_name">戳一戳与服务器提醒</string>
-    <string name="notif_channel_alerts_desc">收到队友戳一戳（Poke）或管理通知时提醒</string>
+    <string name="notif_channel_voice_name">TSCC Voice Call</string>
+    <string name="notif_channel_voice_desc">Maintains background voice connection and quick microphone controls</string>
+    <string name="notif_channel_alerts_name">Poke &amp; Server Alerts</string>
+    <string name="notif_channel_alerts_desc">Instant alerts when teammates poke you or server notices arrive</string>
 </resources>

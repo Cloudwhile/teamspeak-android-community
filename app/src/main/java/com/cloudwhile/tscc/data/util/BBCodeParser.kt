@@ -56,7 +56,7 @@ object BBCodeParser {
                 appendPlain(raw.substring(cursor, match.range.first))
             }
             val isClosing = match.groupValues[1] == "/"
-            val name = match.groupValues[2].lowercase()
+            val name = match.groupValues[2].lowercase(java.util.Locale.ROOT)
             val arg = match.groupValues[3].takeIf { it.isNotBlank() }
             val outPos = plainBuf.length
 
@@ -158,7 +158,7 @@ object BBCodeParser {
 
     private fun parseColor(raw: String?): Color? {
         if (raw.isNullOrBlank()) return null
-        val clean = raw.trim().lowercase()
+        val clean = raw.trim().lowercase(java.util.Locale.ROOT)
         val named = mapOf(
             "red" to 0xFFEF4444,
             "green" to 0xFF22C55E,

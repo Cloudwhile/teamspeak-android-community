@@ -15,12 +15,22 @@ data class AppStrings(
     val tabRoom: String,
     val tabSettings: String,
     // Common
+    val back: String,
     val cancel: String,
     val confirm: String,
     val save: String,
     val delete: String,
     val edit: String,
     val close: String,
+    val clearInputDesc: String,
+    val showPasswordDesc: String,
+    val hidePasswordDesc: String,
+    val defaultIdentityFallback: String,
+    val voiceLabHeaderSubtitle: String,
+    val serverUidLabel: String,
+    val copyServerUidDesc: String,
+    val newVersionBadge: (version: String) -> String,
+    val channelCountAndSecurity: (count: Int, minLevel: Int) -> String,
     val enterTokenAction: String,
     val exitAfkAction: String,
     val requestTalkAction: String,
@@ -142,12 +152,22 @@ val ZhAppStrings = AppStrings(
     tabBookmarks = "书签",
     tabRoom = "频道",
     tabSettings = "设置",
+    back = "返回",
     cancel = "取消",
     confirm = "确认",
     save = "保存",
     delete = "删除",
     edit = "编辑",
     close = "关闭",
+    clearInputDesc = "清空输入",
+    showPasswordDesc = "显示密码",
+    hidePasswordDesc = "隐藏密码",
+    defaultIdentityFallback = "默认身份",
+    voiceLabHeaderSubtitle = "48,000 Hz · 20 ms Opus 低延迟语音管线",
+    serverUidLabel = "服务器 UID",
+    copyServerUidDesc = "复制服务器 UID",
+    newVersionBadge = { ver -> "新版本 · v$ver" },
+    channelCountAndSecurity = { count, minLevel -> "$count 个频道 · Lv.$minLevel" },
     enterTokenAction = "输入密钥",
     exitAfkAction = "解除离开",
     requestTalkAction = "申请发言",
@@ -267,12 +287,25 @@ val EnAppStrings = AppStrings(
     tabBookmarks = "Bookmarks",
     tabRoom = "Channels",
     tabSettings = "Settings",
+    back = "Back",
     cancel = "Cancel",
     confirm = "Confirm",
     save = "Save",
     delete = "Delete",
     edit = "Edit",
     close = "Close",
+    clearInputDesc = "Clear",
+    showPasswordDesc = "Show password",
+    hidePasswordDesc = "Hide password",
+    defaultIdentityFallback = "Default Identity",
+    voiceLabHeaderSubtitle = "48,000 Hz · 20 ms Opus VoIP Pipeline",
+    serverUidLabel = "Server UID",
+    copyServerUidDesc = "Copy Server UID",
+    newVersionBadge = { ver -> "NEW · v$ver" },
+    channelCountAndSecurity = { count, minLevel ->
+        val chLabel = if (count == 1) "1 channel" else "$count channels"
+        "$chLabel · Lv.$minLevel"
+    },
     enterTokenAction = "Enter Key",
     exitAfkAction = "Exit AFK",
     requestTalkAction = "Request Talk",
@@ -358,7 +391,10 @@ val EnAppStrings = AppStrings(
     sectionIdentityAndProfile = "Profile & Identity Keys",
     defaultNicknameLabel = "Default Nickname",
     identityManageTitle = "Identity Keys",
-    identityManageSub = { name, lvl, count -> "Default: $name (Lv.$lvl) · $count keys saved" },
+    identityManageSub = { name, lvl, count ->
+        val keysLabel = if (count == 1) "1 key saved" else "$count keys saved"
+        "Default: $name (Lv.$lvl) · $keysLabel"
+    },
     sectionVoiceAndDsp = "Voice & Acoustic DSP",
     voiceLabTitle = "Voice Mode & Audio Tuning",
     voiceLabSub = "VAD threshold, Opus loopback test, anti-plosive DSP & hardware filters",
@@ -385,11 +421,21 @@ val EnAppStrings = AppStrings(
     clearAllDataConfirmBtn = "Erase Everything"
 )
 
+fun AppStrings.localizeIdentityDisplayName(rawName: String?): String {
+    val trimmed = rawName?.trim().orEmpty()
+    if (trimmed.isEmpty()) return defaultIdentityFallback
+    return when {
+        isEnglish && trimmed == "默认身份" -> "Default Identity"
+        !isEnglish && trimmed == "Default Identity" -> "默认身份"
+        else -> trimmed
+    }
+}
+
 fun resolveAppStrings(language: AppLanguage, locale: Locale = Locale.getDefault()): AppStrings {
     val useEn = when (language) {
         AppLanguage.EN -> true
         AppLanguage.ZH_CN -> false
-        AppLanguage.SYSTEM -> !locale.language.lowercase().startsWith("zh")
+        AppLanguage.SYSTEM -> !locale.language.lowercase(Locale.ROOT).startsWith("zh")
     }
     return if (useEn) EnAppStrings else ZhAppStrings
 }

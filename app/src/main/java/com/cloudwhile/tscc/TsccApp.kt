@@ -4,14 +4,18 @@ import android.app.Activity
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.res.Configuration
 import android.os.Bundle
 import com.cloudwhile.tscc.data.SettingsRepository
 import com.cloudwhile.tscc.data.TsccRepository
 import com.cloudwhile.tscc.data.db.AppDatabase
+import com.cloudwhile.tscc.data.model.AppLanguage
 import com.cloudwhile.tscc.data.update.AppUpdateManager
+import com.cloudwhile.tscc.ui.i18n.resolveAppStrings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.Locale
 
 class TsccApp : Application() {
 
@@ -35,7 +39,7 @@ class TsccApp : Application() {
         super.onCreate()
         instance = this
         registerForegroundTracker()
-        createNotificationChannels()
+        syncNotificationChannels(AppLanguage.SYSTEM)
         database = AppDatabase.getInstance(this)
         settingsRepository = SettingsRepository(this)
         tsccRepository = TsccRepository(this, database, settingsRepository)
@@ -62,22 +66,28 @@ class TsccApp : Application() {
         })
     }
 
-    private fun createNotificationChannels() {
+    fun syncNotificationChannels(language: AppLanguage) {
         val nm = getSystemService(NotificationManager::class.java) ?: return
         val voiceChannel = NotificationChannel(
             CHANNEL_VOICE_CALL,
-            getString(R.string.notif_channel_voice_name),
+            localizedContext.getString(R.string.notif_channel_voice_name),
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = getString(R.string.notif_channel_voice_desc)
+            description = localizedContext.getString(R.string.notif_channel_voice_desc)
             setShowBadge(false)
+        val useEn = resolveAppStrings(language).isEnglish
+        val targetLocale = if (useEn) Locale.ENGLISH else Locale.SIMPLIFIED_CHINESE
+        val localizedContext = Configuration(resources.configuration).run {
+            setLocale(targetLocale)
+            createConfigurationContext(this)
+        }
         }
         val alertsChannel = NotificationChannel(
             CHANNEL_ALERTS,
-            getString(R.string.notif_channel_alerts_name),
+            localizedContext.getString(R.string.notif_channel_alerts_name),
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = getString(R.string.notif_channel_alerts_desc)
+            description = localizedContext.getString(R.string.notif_channel_alerts_desc)
             enableVibration(true)
         }
         nm.createNotificationChannels(listOf(voiceChannel, alertsChannel))

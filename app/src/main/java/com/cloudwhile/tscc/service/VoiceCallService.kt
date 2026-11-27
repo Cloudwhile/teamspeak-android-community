@@ -365,7 +365,7 @@ class VoiceCallService : LifecycleService() {
             state.loopback -> if (en) "Local Opus Loopback Test" else "本地麦克风回路自检中"
             state.status == ConnectionStatus.CONNECTING -> if (en) "Connecting to server..." else "正在连接服务器..."
             state.serverName.isNotBlank() -> state.serverName
-            else -> if (en) "Voice Call Active" else "TeamSpeak 语音通话"
+            else -> if (en) "TSCC Voice Call" else "TSCC 语音通话"
         }
 
         val statusBadge = when {

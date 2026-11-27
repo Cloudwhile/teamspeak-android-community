@@ -141,7 +141,7 @@ fun IdentitiesScreen(
                     {
                         AppCircleIconButton(
                             icon = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = if (strings.isEnglish) "Back" else "返回",
+                            contentDescription = strings.back,
                             onClick = onNavigateBack
                         )
                     }
