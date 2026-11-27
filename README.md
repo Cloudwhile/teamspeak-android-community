@@ -41,8 +41,8 @@
   - Built-in 110 Hz 2nd-order Butterworth anti-plosive filter, transient peak limiter, soft-knee multi-speaker mixer, and per-member `0%–200%` volume memory.
   - Voice Activity Detection (VAD), Push-To-Talk (PTT), Continuous transmission, local Opus loopback self-test, automatic Bluetooth/Wired/Speaker/Earpiece hot-plug routing, and phone-call audio focus recovery.
   - **Graceful Listen-Only Fallback**: Denying microphone permission keeps background playback active without crashing, disables microphone controls across the UI, and guides permission grant on tap.
-- **Channel Management, Text Chat & TS6 Live Streaming**
-  - Sub-channel creation, differential editing, deletion, on-demand BBCode channel descriptions, privilege key redemption, channel/server/direct messaging, and TS6 WebRTC screen/camera streaming.
+- **Channel Management, Text Chat & TS6 Live Streaming (Experimental Alpha)**
+  - Sub-channel creation, differential editing, deletion, on-demand BBCode channel descriptions, privilege key redemption, channel/server/direct messaging, and experimental Alpha TS6 WebRTC screen/camera streaming.
 - **Built-in Auto-Updater**
   - Supports startup update checks and manual checks against GitHub Releases (including `alpha.x` / `beta.x` / `rc.x` pre-releases and stable releases), automatically matching the device CPU architecture, verifying `SHA256SUMS.txt`, and launching the Android package installer.
 

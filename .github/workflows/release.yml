@@ -220,31 +220,87 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/tscc-release-signing.jks"
 
-      - name: Generate release body header
+      - name: Prepare normative English release body & bilingual in-app changelog assets
+        id: notes
         run: |
+          TAG="${{ steps.meta.outputs.tag }}"
           VERSION="${{ steps.meta.outputs.version_name }}"
-          {
-            echo "> **Unofficial Notice / 非官方声明**: TSCC is an independent, unofficial open-source community client and is NOT affiliated with, authorized, or endorsed by TeamSpeak Systems GmbH. / TSCC 为社区独立维护的非官方开源客户端，与 TeamSpeak Systems GmbH 无任何隶属、授权或背书关系。"
-            echo ""
-            echo "### 📦 Multi-Architecture APK Downloads / 多架构安装包选择指南"
-            echo ""
-            echo "| Package / 文件名 | Architecture / 架构 | Target Devices / 适用设备 |"
-            echo "| :--- | :--- | :--- |"
-            echo "| \`TSCC-v${VERSION}-arm64-v8a.apk\` | \`arm64-v8a\` | **Recommended / 推荐**: Modern 64-bit ARM Android phones & tablets |"
-            echo "| \`TSCC-v${VERSION}-armeabi-v7a.apk\` | \`armeabi-v7a\` | Legacy 32-bit ARM Android devices |"
-            echo "| \`TSCC-v${VERSION}-x86_64.apk\` | \`x86_64\` | Android Emulator, Waydroid, ChromeOS |"
-            echo "| \`TSCC-v${VERSION}-universal.apk\` | \`universal\` | Universal all-in-one APK |"
-            echo ""
-            echo "SHA-256 checksums are attached in \`SHA256SUMS.txt\`."
-          } > dist/RELEASE_NOTES_HEADER.md
+          PREV_TAG=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+
+          EN_CHANGELOG="changelogs/${TAG}.md"
+          ZH_CHANGELOG="locales/changelogs/${TAG}.zh-CN.md"
+
+          if [ -f "$EN_CHANGELOG" ]; then
+            cp "$EN_CHANGELOG" dist/RELEASE_NOTES.en.md
+            if [ -f "$ZH_CHANGELOG" ]; then
+              cp "$ZH_CHANGELOG" dist/RELEASE_NOTES.zh-CN.md
+            else
+              cp "$EN_CHANGELOG" dist/RELEASE_NOTES.zh-CN.md
+            fi
+            echo "auto_notes=false" >> "$GITHUB_OUTPUT"
+
+            {
+              echo "> [!NOTE]"
+              echo "> **Unofficial Community Project**: TSCC is an independent, open-source community client and is NOT affiliated with, authorized, endorsed, or sponsored by TeamSpeak Systems GmbH."
+              echo ""
+              cat "$EN_CHANGELOG"
+              echo ""
+              echo "### Multi-Architecture APK Downloads"
+              echo ""
+              echo "| Package | Architecture | Target Devices |"
+              echo "| :--- | :--- | :--- |"
+              echo "| \`TSCC-v${VERSION}-arm64-v8a.apk\` | \`arm64-v8a\` | **Recommended**: Modern 64-bit ARM Android phones & tablets |"
+              echo "| \`TSCC-v${VERSION}-armeabi-v7a.apk\` | \`armeabi-v7a\` | Legacy 32-bit ARM Android devices |"
+              echo "| \`TSCC-v${VERSION}-x86_64.apk\` | \`x86_64\` | Android Emulator, Waydroid, ChromeOS |"
+              echo "| \`TSCC-v${VERSION}-universal.apk\` | \`universal\` | Universal all-in-one APK |"
+              echo ""
+              echo "SHA-256 checksums for all APK variants are attached in \`SHA256SUMS.txt\`."
+              if [ -n "$PREV_TAG" ]; then
+                echo ""
+                echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${TAG}"
+              fi
+            } > dist/GITHUB_RELEASE_BODY.md
+          else
+            echo "auto_notes=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "> [!WARNING]"
+              echo "> **Experimental Alpha — TS6 Live Streaming**: Screen sharing and camera live streaming over TS6 WebRTC are currently in unstable Alpha testing."
+              echo ""
+              echo "See the GitHub release page for commit history and multi-architecture downloads."
+            } > dist/RELEASE_NOTES.en.md
+            {
+              echo "> [!WARNING]"
+              echo "> **Alpha 不稳定测试提示 — TS6 频道直播**：基于 TS6 WebRTC 的屏幕共享与摄像头直播当前处于 Alpha 不稳定测试阶段。"
+              echo ""
+              echo "请前往 GitHub 发布页查看详细提交记录与安装包列表。"
+            } > dist/RELEASE_NOTES.zh-CN.md
+            {
+              echo "> [!NOTE]"
+              echo "> **Unofficial Community Project**: TSCC is an independent, open-source community client and is NOT affiliated with, authorized, endorsed, or sponsored by TeamSpeak Systems GmbH."
+              echo ""
+              echo "> [!WARNING]"
+              echo "> **Experimental Alpha — TS6 Live Streaming**: Screen sharing and camera live broadcasting/viewing over TeamSpeak 6 WebRTC are currently in **unstable Alpha testing**."
+              echo ""
+              echo "### Multi-Architecture APK Downloads"
+              echo ""
+              echo "| Package | Architecture | Target Devices |"
+              echo "| :--- | :--- | :--- |"
+              echo "| \`TSCC-v${VERSION}-arm64-v8a.apk\` | \`arm64-v8a\` | **Recommended**: Modern 64-bit ARM Android phones & tablets |"
+              echo "| \`TSCC-v${VERSION}-armeabi-v7a.apk\` | \`armeabi-v7a\` | Legacy 32-bit ARM Android devices |"
+              echo "| \`TSCC-v${VERSION}-x86_64.apk\` | \`x86_64\` | Android Emulator, Waydroid, ChromeOS |"
+              echo "| \`TSCC-v${VERSION}-universal.apk\` | \`universal\` | Universal all-in-one APK |"
+              echo ""
+              echo "SHA-256 checksums for all APK variants are attached in \`SHA256SUMS.txt\`."
+            } > dist/GITHUB_RELEASE_BODY.md
+          fi
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: "TSCC v${{ steps.meta.outputs.version_name }}"
-          body_path: dist/RELEASE_NOTES_HEADER.md
-          generate_release_notes: true
+          body_path: dist/GITHUB_RELEASE_BODY.md
+          generate_release_notes: ${{ steps.notes.outputs.auto_notes == 'true' }}
           prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
           fail_on_unmatched_files: true
           files: |
@@ -253,3 +309,5 @@ jobs:
             dist/TSCC-v${{ steps.meta.outputs.version_name }}-x86_64.apk
             dist/TSCC-v${{ steps.meta.outputs.version_name }}-universal.apk
             dist/SHA256SUMS.txt
+            dist/RELEASE_NOTES.en.md
+            dist/RELEASE_NOTES.zh-CN.md
