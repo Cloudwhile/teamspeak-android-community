@@ -3,6 +3,7 @@ package com.cloudwhile.tscc.ui.screens.room
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -53,8 +54,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -77,6 +76,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.cloudwhile.tscc.BuildConfig
 import com.cloudwhile.tscc.data.model.ChannelNode
 import com.cloudwhile.tscc.data.model.OnlineClient
 import com.cloudwhile.tscc.data.model.ServerSnapshot
@@ -85,6 +85,7 @@ import com.cloudwhile.tscc.data.util.BBCodeParser
 import com.cloudwhile.tscc.data.util.TsccServerUri
 import com.cloudwhile.tscc.ui.components.AppCapsuleField
 import com.cloudwhile.tscc.ui.components.AppModalDialog
+import com.cloudwhile.tscc.ui.components.AppPillSwitch
 import com.cloudwhile.tscc.ui.components.AppPrimaryPillButton
 import com.cloudwhile.tscc.ui.components.AppSecondaryPillButton
 import com.cloudwhile.tscc.ui.components.AppSegmentedPills
@@ -858,12 +859,17 @@ fun MemberDetailAndActionSheet(
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ServerMetricCell(
-                        label = if (isEn) "Client Platform" else "客户端平台与版本",
-                        value = listOf(client.platform, client.version.substringBefore(" ["))
+                    val platformDisplay = if (isMe) {
+                        "Android ${Build.VERSION.RELEASE} · TSCC v${BuildConfig.VERSION_NAME}"
+                    } else {
+                        listOf(client.platform, client.version.substringBefore(" ["))
                             .filter { it.isNotBlank() }
                             .joinToString(" · ")
-                            .ifBlank { if (isEn) "Syncing..." else "同步中..." },
+                            .ifBlank { if (isEn) "Syncing..." else "同步中..." }
+                    }
+                    ServerMetricCell(
+                        label = if (isEn) "Client Platform" else "客户端平台与版本",
+                        value = platformDisplay,
                         modifier = Modifier.weight(1.2f)
                     )
                     ServerMetricCell(
@@ -920,7 +926,7 @@ fun MemberDetailAndActionSheet(
                                 color = colors.textSecondary
                             )
                         }
-                        Switch(
+                        AppPillSwitch(
                             checked = awayChecked,
                             onCheckedChange = { checked ->
                                 awayChecked = checked
@@ -962,7 +968,7 @@ fun MemberDetailAndActionSheet(
                                 color = colors.textSecondary
                             )
                         }
-                        Switch(
+                        AppPillSwitch(
                             checked = client.isChannelCommander,
                             onCheckedChange = { onSetSelfChannelCommander(it) }
                         )
@@ -1012,12 +1018,9 @@ fun MemberDetailAndActionSheet(
                             color = colors.textSecondary,
                             modifier = Modifier.padding(end = 8.dp)
                         )
-                        Switch(
+                        AppPillSwitch(
                             checked = muted,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = colors.pillActiveText,
-                                checkedTrackColor = colors.coral
-                            ),
+                            activeTrackColor = colors.coral,
                             onCheckedChange = {
                                 muted = it
                                 onVolumeChanged(volume.roundToInt(), it)

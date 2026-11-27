@@ -104,7 +104,9 @@ import com.cloudwhile.tscc.data.update.UpdateUiState
 import com.cloudwhile.tscc.ui.components.AppBrandLogo
 import com.cloudwhile.tscc.ui.components.AppCapsuleField
 import com.cloudwhile.tscc.ui.components.AppCircleIconButton
+import com.cloudwhile.tscc.ui.components.AppFieldIconButton
 import com.cloudwhile.tscc.ui.components.AppModalDialog
+import com.cloudwhile.tscc.ui.components.AppPillSwitch
 import com.cloudwhile.tscc.ui.components.AppPrimaryPillButton
 import com.cloudwhile.tscc.ui.components.AppScreenHeader
 import com.cloudwhile.tscc.ui.components.AppSecondaryPillButton
@@ -443,7 +445,7 @@ private fun SettingsHubRoot(
     val aboutBadge = when {
         updateState.status == UpdateStatus.CHECKING -> if (isEn) "Checking..." else "检查中..."
         hasNewVersion -> strings.newVersionBadge(updateState.latestRelease?.versionName.orEmpty())
-        else -> "v${BuildConfig.VERSION_NAME}"
+        else -> "v${BuildConfig.VERSION_NAME.removeSuffix("-debug")}"
     }
 
     val langBadge = when (settings.appLanguage) {
@@ -754,8 +756,8 @@ private fun ConfigBackupSubScreen(
                         PasswordVisualTransformation()
                     },
                     trailing = {
-                        Icon(
-                            imageVector = if (exportPwdVisible) {
+                        AppFieldIconButton(
+                            icon = if (exportPwdVisible) {
                                 Icons.Default.VisibilityOff
                             } else {
                                 Icons.Default.Visibility
@@ -765,10 +767,7 @@ private fun ConfigBackupSubScreen(
                             } else {
                                 strings.showPasswordDesc
                             },
-                            tint = colors.textSecondary,
-                            modifier = Modifier
-                                .size(18.dp)
-                                .clickable { exportPwdVisible = !exportPwdVisible }
+                            onClick = { exportPwdVisible = !exportPwdVisible }
                         )
                     }
                 )
@@ -930,8 +929,8 @@ private fun ConfigBackupSubScreen(
                     }
                 ),
                 trailing = {
-                    Icon(
-                        imageVector = if (decryptPwdVisible) {
+                    AppFieldIconButton(
+                        icon = if (decryptPwdVisible) {
                             Icons.Default.VisibilityOff
                         } else {
                             Icons.Default.Visibility
@@ -941,10 +940,7 @@ private fun ConfigBackupSubScreen(
                         } else {
                             strings.showPasswordDesc
                         },
-                        tint = colors.textSecondary,
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clickable { decryptPwdVisible = !decryptPwdVisible }
+                        onClick = { decryptPwdVisible = !decryptPwdVisible }
                     )
                 }
             )
@@ -1722,7 +1718,7 @@ private fun SettingsNavEntryRow(
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
                 color = titleColor ?: colors.textPrimary,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
@@ -1889,48 +1885,5 @@ private fun SettingToggleRow(
         }
         Spacer(modifier = Modifier.width(12.dp))
         AppPillSwitch(checked = checked && visuallyEnabled, onCheckedChange = onCheckedChange)
-    }
-}
-
-@Composable
-private fun AppPillSwitch(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    val colors = AppTheme.colors
-    val trackBg by animateColorAsState(
-        targetValue = if (checked) colors.pillActiveBg else colors.cardElevated,
-        animationSpec = tween(200),
-        label = "swTrack"
-    )
-    val thumbColor by animateColorAsState(
-        targetValue = if (checked) colors.pillActiveText else colors.textSecondary,
-        animationSpec = tween(200),
-        label = "swThumb"
-    )
-    val thumbOffset by animateDpAsState(
-        targetValue = if (checked) 20.dp else 0.dp,
-        animationSpec = spring(dampingRatio = 0.72f, stiffness = 500f),
-        label = "swOffset"
-    )
-
-    Box(
-        contentAlignment = Alignment.CenterStart,
-        modifier = Modifier
-            .width(48.dp)
-            .height(28.dp)
-            .pressableScale(0.92f) { onCheckedChange(!checked) }
-            .clip(RoundedCornerShape(50))
-            .background(trackBg)
-            .border(1.dp, colors.border, RoundedCornerShape(50))
-            .padding(horizontal = 4.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .offset(x = thumbOffset)
-                .size(20.dp)
-                .clip(CircleShape)
-                .background(thumbColor)
-        )
     }
 }

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -606,7 +607,8 @@ fun Ts6LiveStreamViewerStage(
                     onClose = onClose,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .padding(horizontal = 16.dp, vertical = 20.dp)
+                        .statusBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
                 )
             }
         }
@@ -790,16 +792,16 @@ private fun OverlayTinyButton(
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(26.dp)
+            .size(32.dp)
             .clip(CircleShape)
-            .background(Color(0x33FFFFFF))
+            .background(Color(0x38FFFFFF))
             .clickable { onClick() }
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = tint,
-            modifier = Modifier.size(15.dp)
+            modifier = Modifier.size(16.dp)
         )
     }
 }

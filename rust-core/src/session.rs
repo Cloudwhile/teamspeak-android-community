@@ -2520,8 +2520,66 @@ pub fn translate_ts_error(err: TsError) -> String {
     }
 }
 
+fn humanize_connect_error_fallback(raw: &str, en: bool) -> String {
+    let lower = raw.to_ascii_lowercase();
+    if lower.contains("packet was not acked")
+        || lower.contains("timed out")
+        || lower.contains("timeout")
+    {
+        return if en {
+            "Connection timed out. Please check the server address, port, and UDP network."
+                .to_string()
+        } else {
+            "连接服务器超时，请检查服务器地址、端口及网络是否畅通".to_string()
+        };
+    }
+    if lower.contains("connection refused")
+        || lower.contains("connectionrefused")
+        || lower.contains("connection reset")
+        || lower.contains("connectionreset")
+        || lower.contains("port unreachable")
+    {
+        return if en {
+            "Connection refused by target host. Please verify the server is running and port is correct."
+                .to_string()
+        } else {
+            "目标端口拒绝连接，请确认服务器已开启且端口号正确".to_string()
+        };
+    }
+    if lower.contains("network is unreachable")
+        || lower.contains("networkunreachable")
+        || lower.contains("no route to host")
+        || lower.contains("hostunreachable")
+        || lower.contains("addrnotavailable")
+    {
+        return if en {
+            "Network is unreachable. Please check your network or VPN connection.".to_string()
+        } else {
+            "当前网络不可达，请检查网络连接或 VPN 设置".to_string()
+        };
+    }
+    if lower.contains("failed to lookup")
+        || lower.contains("name or service not known")
+        || lower.contains("nodename nor servname")
+        || lower.contains("dns")
+    {
+        return if en {
+            "Unable to resolve server domain. Please check the hostname or DNS settings."
+                .to_string()
+        } else {
+            "无法解析服务器域名，请检查地址拼写或 DNS 设置".to_string()
+        };
+    }
+    if en {
+        "Unable to connect to server. Please check the address and server status.".to_string()
+    } else {
+        "无法连接到服务器，请检查服务器地址与运行状态".to_string()
+    }
+}
+
 fn format_connect_error(err: &tsclientlib::Error) -> String {
-    if is_en() {
+    let en = is_en();
+    if en {
         return match err {
             tsclientlib::Error::ConnectTs(ts_err) => {
                 format!("Connection refused: {}", translate_ts_error(*ts_err))
@@ -2532,7 +2590,7 @@ fn format_connect_error(err: &tsclientlib::Error) -> String {
             tsclientlib::Error::InitserverTimeout => {
                 "Connection handshake timed out. Check server host/port and UDP firewall.".to_string()
             }
-            other => format!("Connection error: {other}"),
+            other => humanize_connect_error_fallback(&format!("{other} {other:?}"), true),
         };
     }
     match err {
@@ -2545,7 +2603,7 @@ fn format_connect_error(err: &tsclientlib::Error) -> String {
         tsclientlib::Error::InitserverTimeout => {
             "连接握手超时，请检查服务器地址/端口是否正确或防火墙 UDP 通畅".to_string()
         }
-        other => format!("服务器连接异常：{other}"),
+        other => humanize_connect_error_fallback(&format!("{other} {other:?}"), false),
     }
 }
 
@@ -2863,6 +2921,25 @@ mod tests {
         assert!(!is_perm);
         assert_eq!(code, 0x030d);
         assert!(msg.contains("密码不正确"));
+    }
+
+    #[test]
+    fn humanizes_udp_timeout_and_refused_connect_errors_without_raw_debug_syntax() {
+        let raw_timeout =
+            r#"Failed to connect to server at "127.0.0.1:9988": [Connect(TsProto(Timeout("Packet was not acked")))]"#;
+        let zh_timeout = humanize_connect_error_fallback(raw_timeout, false);
+        let en_timeout = humanize_connect_error_fallback(raw_timeout, true);
+        assert_eq!(
+            zh_timeout,
+            "连接服务器超时，请检查服务器地址、端口及网络是否畅通"
+        );
+        assert!(en_timeout.contains("Connection timed out"));
+        assert!(!zh_timeout.contains("TsProto"));
+        assert!(!en_timeout.contains("TsProto"));
+
+        let raw_refused = "Os { code: 111, kind: ConnectionRefused, message: \"Connection refused\" }";
+        assert!(humanize_connect_error_fallback(raw_refused, false).contains("拒绝连接"));
+        assert!(humanize_connect_error_fallback(raw_refused, true).contains("Connection refused"));
     }
 
     #[test]

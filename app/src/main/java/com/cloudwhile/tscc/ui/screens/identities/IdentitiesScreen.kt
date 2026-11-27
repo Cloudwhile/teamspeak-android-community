@@ -146,14 +146,7 @@ fun IdentitiesScreen(
                         )
                     }
                 } else null
-            ) {
-                AppCircleIconButton(
-                    icon = Icons.Default.Add,
-                    contentDescription = if (strings.isEnglish) "New Identity" else "新建身份",
-                    active = true,
-                    onClick = { showCreateDialog = true }
-                )
-            }
+            )
         }
 
         item {

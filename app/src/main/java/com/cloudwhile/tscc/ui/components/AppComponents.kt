@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -30,11 +31,13 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -707,6 +710,80 @@ fun AppCapsuleField(
 }
 
 @Composable
+fun AppFieldIconButton(
+    icon: ImageVector,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    tint: Color = AppTheme.colors.textSecondary
+) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
+@Composable
+fun AppPillSwitch(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    activeTrackColor: Color? = null,
+    activeThumbColor: Color? = null
+) {
+    val colors = AppTheme.colors
+    val targetTrack = if (checked) (activeTrackColor ?: colors.pillActiveBg) else colors.cardElevated
+    val targetThumb = if (checked) {
+        activeThumbColor ?: if (activeTrackColor != null) Color.White else colors.pillActiveText
+    } else {
+        colors.textSecondary
+    }
+    val trackBg by animateColorAsState(
+        targetValue = targetTrack,
+        animationSpec = tween(200),
+        label = "swTrack"
+    )
+    val thumbColor by animateColorAsState(
+        targetValue = targetThumb,
+        animationSpec = tween(200),
+        label = "swThumb"
+    )
+    val thumbOffset by animateDpAsState(
+        targetValue = if (checked) 20.dp else 0.dp,
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = 500f),
+        label = "swOffset"
+    )
+
+    Box(
+        contentAlignment = Alignment.CenterStart,
+        modifier = Modifier
+            .width(48.dp)
+            .height(28.dp)
+            .pressableScale(0.92f) { onCheckedChange(!checked) }
+            .clip(RoundedCornerShape(50))
+            .background(trackBg)
+            .border(1.dp, colors.border, RoundedCornerShape(50))
+            .padding(horizontal = 4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = thumbOffset)
+                .size(20.dp)
+                .clip(CircleShape)
+                .background(thumbColor)
+        )
+    }
+}
+
+@Composable
 fun <T> AppSegmentedPills(
     options: List<Pair<T, String>>,
     selected: T,
@@ -847,6 +924,7 @@ fun AppModalDialog(
 ) {
     val colors = AppTheme.colors
     val strings = AppTheme.strings
+    val showDismissButton = dismissText == null || dismissText.isNotEmpty()
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -854,7 +932,9 @@ fun AppModalDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
+                .systemBarsPadding()
+                .imePadding()
+                .padding(horizontal = 20.dp, vertical = 16.dp)
                 .clip(RoundedCornerShape(26.dp))
                 .background(colors.card)
                 .border(1.dp, colors.border, RoundedCornerShape(26.dp))
@@ -888,11 +968,13 @@ fun AppModalDialog(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                AppSecondaryPillButton(
-                    text = dismissText ?: strings.cancel,
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
-                )
+                if (showDismissButton) {
+                    AppSecondaryPillButton(
+                        text = dismissText ?: strings.cancel,
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
                 AppPrimaryPillButton(
                     text = confirmText,
                     enabled = confirmEnabled,

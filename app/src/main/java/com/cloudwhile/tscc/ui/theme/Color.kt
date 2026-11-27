@@ -24,17 +24,20 @@ val AppLightTextTertiary = Color(0xFF9CA3AF)
 
 // Accents
 val AccentPeriwinkle = Color(0xFF7B82FF)
+val AccentPeriwinkleLightMode = Color(0xFF4F46E5)
 val AccentPeriwinkleCard = Color(0xFF858DFF)
 val AccentPeriwinkleSoft = Color(0x247B82FF)
 
 val AccentMarigold = Color(0xFFF6CE62)
-val AccentMarigoldSoft = Color(0x29F6CE62)
+val AccentMarigoldLightMode = Color(0xFFB45309)
+val AccentMarigoldSoft = Color(0x29F59E0B)
 
 val AccentCoral = Color(0xFFF56A5D)
+val AccentCoralLightMode = Color(0xFFDC2626)
 val AccentCoralSoft = Color(0x24F56A5D)
 
 val AccentEmerald = Color(0xFF34D399)
-val AccentEmeraldLightMode = Color(0xFF10B981)
+val AccentEmeraldLightMode = Color(0xFF059669)
 val AccentEmeraldSoft = Color(0x2634D399)
 
 val InkOnPastel = Color(0xFF141416)

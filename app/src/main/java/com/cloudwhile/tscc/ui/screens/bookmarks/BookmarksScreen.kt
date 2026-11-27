@@ -68,9 +68,11 @@ import com.cloudwhile.tscc.data.util.TsccServerUri
 import com.cloudwhile.tscc.data.util.TsccUriParser
 import com.cloudwhile.tscc.ui.components.AppCapsuleField
 import com.cloudwhile.tscc.ui.components.AppCircleIconButton
+import com.cloudwhile.tscc.ui.components.AppFieldIconButton
 import com.cloudwhile.tscc.ui.components.AppModalDialog
 import com.cloudwhile.tscc.ui.components.AppPrimaryPillButton
 import com.cloudwhile.tscc.ui.components.AppScreenHeader
+import com.cloudwhile.tscc.ui.components.AppSecondaryPillButton
 import com.cloudwhile.tscc.ui.components.DashedHorizontalLine
 import com.cloudwhile.tscc.ui.components.PulsingEmeraldDot
 import com.cloudwhile.tscc.ui.components.pressableScale
@@ -158,13 +160,10 @@ fun BookmarksScreen(
                         leadingIcon = Icons.Default.Search,
                         trailing = if (searchQuery.isNotEmpty()) {
                             {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
+                                AppFieldIconButton(
+                                    icon = Icons.Default.Close,
                                     contentDescription = strings.clearInputDesc,
-                                    tint = colors.textSecondary,
-                                    modifier = Modifier
-                                        .size(18.dp)
-                                        .clickable { searchQuery = "" }
+                                    onClick = { searchQuery = "" }
                                 )
                             }
                         } else null
@@ -210,37 +209,47 @@ fun BookmarksScreen(
                     }
                 }
 
-                items(filteredBookmarks, key = { it.id }) { bm ->
-                    val isConnectedToThis = isCallActive && activeBookmarkId == bm.id
-                    BookmarkCard(
-                        bookmark = bm,
-                        isConnectedToThis = isConnectedToThis,
-                        onCardTap = {
-                            if (isConnectedToThis) {
-                                onReturnToRoom()
-                            } else {
-                                onSelectBookmark(bm.id)
-                                onConnectBookmark(bm)
-                            }
-                        },
-                        onEdit = {
-                            editingBookmark = bm
-                            showEditDialog = true
-                        },
-                        onShare = {
-                            val link = TsccServerUri(
-                                host = bm.address,
-                                port = bm.port,
-                                nickname = bm.nickname,
-                                channel = bm.defaultChannel.takeIf { it.isNotBlank() },
-                                label = bm.label
-                            ).toUriString()
-                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                            cm?.setPrimaryClip(ClipData.newPlainText("tscc", link))
-                            onCopyMessage(if (strings.isEnglish) "Server invite link copied" else "已复制服务器邀请链接")
-                        },
-                        onDelete = { pendingDeleteBookmark = bm }
-                    )
+                if (filteredBookmarks.isEmpty()) {
+                    item {
+                        NoMatchingBookmarksCard(
+                            query = searchQuery,
+                            isEnglish = strings.isEnglish,
+                            onClearSearch = { searchQuery = "" }
+                        )
+                    }
+                } else {
+                    items(filteredBookmarks, key = { it.id }) { bm ->
+                        val isConnectedToThis = isCallActive && activeBookmarkId == bm.id
+                        BookmarkCard(
+                            bookmark = bm,
+                            isConnectedToThis = isConnectedToThis,
+                            onCardTap = {
+                                if (isConnectedToThis) {
+                                    onReturnToRoom()
+                                } else {
+                                    onSelectBookmark(bm.id)
+                                    onConnectBookmark(bm)
+                                }
+                            },
+                            onEdit = {
+                                editingBookmark = bm
+                                showEditDialog = true
+                            },
+                            onShare = {
+                                val link = TsccServerUri(
+                                    host = bm.address,
+                                    port = bm.port,
+                                    nickname = bm.nickname,
+                                    channel = bm.defaultChannel.takeIf { it.isNotBlank() },
+                                    label = bm.label
+                                ).toUriString()
+                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                cm?.setPrimaryClip(ClipData.newPlainText("tscc", link))
+                                onCopyMessage(if (strings.isEnglish) "Server invite link copied" else "已复制服务器邀请链接")
+                            },
+                            onDelete = { pendingDeleteBookmark = bm }
+                        )
+                    }
                 }
             }
         }
@@ -331,6 +340,51 @@ private fun EmptyBookmarksCard(onAddClick: () -> Unit) {
             text = strings.addFirstBookmark,
             leadingIcon = Icons.Default.Add,
             onClick = onAddClick
+        )
+    }
+}
+
+@Composable
+private fun NoMatchingBookmarksCard(
+    query: String,
+    isEnglish: Boolean,
+    onClearSearch: () -> Unit
+) {
+    val colors = AppTheme.colors
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(colors.card)
+            .border(1.dp, colors.border, RoundedCornerShape(22.dp))
+            .padding(horizontal = 22.dp, vertical = 28.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.Search,
+            contentDescription = null,
+            tint = colors.textSecondary,
+            modifier = Modifier.size(28.dp)
+        )
+        Text(
+            text = if (isEnglish) "No matching bookmarks" else "未找到匹配的服务器书签",
+            style = MaterialTheme.typography.titleSmall,
+            color = colors.textPrimary,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = if (isEnglish) {
+                "No saved server matched \"$query\"."
+            } else {
+                "没有找到包含「$query」的书签名称、服务器地址或昵称。"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.textSecondary
+        )
+        AppSecondaryPillButton(
+            text = if (isEnglish) "Clear Search" else "清空搜索条件",
+            onClick = onClearSearch
         )
     }
 }
@@ -559,8 +613,8 @@ private fun BookmarkCard(
                 modifier = Modifier.weight(1f)
             )
             if (hasPwd) {
-                Icon(
-                    imageVector = if (showPasswordPlain) {
+                AppFieldIconButton(
+                    icon = if (showPasswordPlain) {
                         Icons.Default.VisibilityOff
                     } else {
                         Icons.Default.Visibility
@@ -571,9 +625,7 @@ private fun BookmarkCard(
                         strings.showPasswordDesc
                     },
                     tint = primaryInk,
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clickable { showPasswordPlain = !showPasswordPlain }
+                    onClick = { showPasswordPlain = !showPasswordPlain }
                 )
             }
         }
@@ -639,6 +691,7 @@ private fun BookmarkEditDialog(
     var label by remember { mutableStateOf(initial?.label.orEmpty()) }
     var defaultChannel by remember { mutableStateOf(initial?.defaultChannel.orEmpty()) }
     var channelPassword by remember { mutableStateOf(initial?.channelPassword.orEmpty()) }
+    var channelPwdVisible by remember { mutableStateOf(false) }
     var selectedIdentityId by remember { mutableStateOf(initial?.identityId) }
 
     val parsedAddress = remember(rawHostPort) { TsccUriParser.parse(rawHostPort) }
@@ -725,8 +778,8 @@ private fun BookmarkEditDialog(
                 PasswordVisualTransformation()
             },
             trailing = {
-                Icon(
-                    imageVector = if (passwordVisible) {
+                AppFieldIconButton(
+                    icon = if (passwordVisible) {
                         Icons.Default.VisibilityOff
                     } else {
                         Icons.Default.Visibility
@@ -736,10 +789,7 @@ private fun BookmarkEditDialog(
                     } else {
                         strings.showPasswordDesc
                     },
-                    tint = colors.textSecondary,
-                    modifier = Modifier
-                        .size(18.dp)
-                        .clickable { passwordVisible = !passwordVisible }
+                    onClick = { passwordVisible = !passwordVisible }
                 )
             }
         )
@@ -784,8 +834,28 @@ private fun BookmarkEditDialog(
                     value = channelPassword,
                     onValueChange = { channelPassword = it },
                     label = if (strings.isEnglish) "Sub-channel Password" else "子频道密码（可选）",
-                    placeholder = "",
-                    visualTransformation = PasswordVisualTransformation()
+                    placeholder = if (strings.isEnglish) "Leave blank if none" else "公开子频道请留空",
+                    leadingIcon = Icons.Default.Lock,
+                    visualTransformation = if (channelPwdVisible) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                    trailing = {
+                        AppFieldIconButton(
+                            icon = if (channelPwdVisible) {
+                                Icons.Default.VisibilityOff
+                            } else {
+                                Icons.Default.Visibility
+                            },
+                            contentDescription = if (channelPwdVisible) {
+                                strings.hidePasswordDesc
+                            } else {
+                                strings.showPasswordDesc
+                            },
+                            onClick = { channelPwdVisible = !channelPwdVisible }
+                        )
+                    }
                 )
             }
 

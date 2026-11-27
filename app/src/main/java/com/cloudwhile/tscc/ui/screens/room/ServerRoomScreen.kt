@@ -27,6 +27,8 @@ import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -43,11 +45,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.ScreenShare
@@ -1927,10 +1931,14 @@ private fun VoiceDockBar(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
                 val micOff = !hasMicPermission || isMicMuted
                 DockCircleControl(
                     icon = if (micOff) Icons.Default.MicOff else Icons.Default.Mic,
@@ -1970,7 +1978,7 @@ private fun VoiceDockBar(
                     onClick = onToggleLiveBroadcast
                 )
 
-                Box {
+                Box(modifier = Modifier.weight(1f, fill = false)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1980,7 +1988,7 @@ private fun VoiceDockBar(
                             .clip(RoundedCornerShape(50))
                             .background(colors.cardElevated)
                             .border(1.dp, colors.border, RoundedCornerShape(50))
-                            .padding(horizontal = 14.dp)
+                            .padding(horizontal = 12.dp)
                     ) {
                         Icon(
                             imageVector = when (activeRoute) {
@@ -1996,7 +2004,9 @@ private fun VoiceDockBar(
                             text = activeRoute.localizedLabel(strings.isEnglish),
                             color = colors.textPrimary,
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
@@ -2069,7 +2079,7 @@ private fun DockCircleControl(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ChannelActionBottomSheet(
     channel: ChannelNode,
@@ -2111,6 +2121,8 @@ private fun ChannelActionBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 22.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
@@ -2120,9 +2132,9 @@ private fun ChannelActionBottomSheet(
                     style = MaterialTheme.typography.headlineSmall,
                     color = colors.textPrimary
                 )
-                Row(
+                FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     InfoPillChip(text = typeBadge, tint = colors.periwinkle, bg = colors.periwinkleSoft)
                     InfoPillChip(text = codecBadge, tint = colors.textSecondary, bg = colors.cardElevated)
@@ -2322,7 +2334,7 @@ private fun ChatBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(490.dp)
+                .fillMaxHeight(0.78f)
                 .imePadding()
                 .navigationBarsPadding()
                 .padding(horizontal = 20.dp)
@@ -2345,14 +2357,38 @@ private fun ChatBottomSheet(
                 }
             )
 
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            if (filteredMessages.isEmpty()) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp, horizontal = 16.dp)
+                ) {
+                    Text(
+                        text = if (selectedTab == ChatTarget.CLIENT && resolvedDmPeer == null) {
+                            if (strings.isEnglish) {
+                                "Tap any channel member to start a direct message"
+                            } else {
+                                "在频道成员列表中点击成员「发起私聊」即可在此对话"
+                            }
+                        } else {
+                            if (strings.isEnglish) "No messages in this tab yet" else "当前暂无聊天消息"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                 items(filteredMessages, key = { it.id }) { msg ->
                     val annotated = remember(msg.content) { BBCodeParser.parse(msg.content) }
                     val canSelectSenderForDm = msg.target == ChatTarget.CLIENT &&
@@ -2437,6 +2473,7 @@ private fun ChatBottomSheet(
                         )
                     }
                 }
+            }
             }
 
             Row(

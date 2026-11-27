@@ -82,6 +82,7 @@ import com.cloudwhile.tscc.data.model.AppLanguage
 import com.cloudwhile.tscc.data.model.VoiceMode
 import com.cloudwhile.tscc.ui.components.AppBrandLogo
 import com.cloudwhile.tscc.ui.components.AppCapsuleField
+import com.cloudwhile.tscc.ui.components.AppFieldIconButton
 import com.cloudwhile.tscc.ui.components.AppPrimaryPillButton
 import com.cloudwhile.tscc.ui.components.AppSecondaryPillButton
 import com.cloudwhile.tscc.ui.components.AppSegmentedPills
@@ -529,13 +530,11 @@ private fun OnboardingIdentityStep(
             leadingIcon = Icons.Default.Person,
             trailing = if (nicknameDraft.isNotEmpty()) {
                 {
-                    Icon(
-                        imageVector = Icons.Default.Close,
+                    AppFieldIconButton(
+                        icon = Icons.Default.Close,
                         contentDescription = strings.clearInputDesc,
                         tint = colors.textTertiary,
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clickable { onNicknameChange("") }
+                        onClick = { onNicknameChange("") }
                     )
                 }
             } else null,
