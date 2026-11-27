@@ -184,6 +184,7 @@ private fun MainAppShell(viewModel: MainViewModel) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 viewModel.refreshMicPermission()
+                viewModel.updateManager.cleanupInstalledOrStaleApksAsync()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)

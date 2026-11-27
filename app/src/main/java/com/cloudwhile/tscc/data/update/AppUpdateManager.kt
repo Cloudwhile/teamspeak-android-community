@@ -108,6 +108,47 @@ class AppUpdateManager(private val context: Context) {
         }
 
         private val KNOWN_ABIS = listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+        private val APK_FILENAME_VER_REGEX = Regex(
+            """^TSCC-v?(.+?)(?:-(?:arm64-v8a|armeabi-v7a|x86_64|x86|universal))?(?:-release|-debug)?\.apk$""",
+            RegexOption.IGNORE_CASE
+        )
+
+        internal fun extractVersionFromApkFileName(fileName: String): String? {
+            val match = APK_FILENAME_VER_REGEX.matchEntire(fileName.trim()) ?: return null
+            return normalizeVersionString(match.groupValues[1]).takeIf { it.isNotBlank() }
+        }
+
+        internal fun cleanupInstalledOrStaleApksInDir(
+            dir: File,
+            currentVersion: String,
+            archiveVersionResolver: ((File) -> String?)? = null
+        ) {
+            if (!dir.exists() || !dir.isDirectory) return
+            dir.listFiles()?.forEach { file ->
+                if (!file.isFile) {
+                    runCatching { file.deleteRecursively() }
+                    return@forEach
+                }
+                if (!file.name.endsWith(".apk", ignoreCase = true) || file.length() <= 0L) {
+                    runCatching { file.delete() }
+                    return@forEach
+                }
+                val apkVer = archiveVersionResolver?.invoke(file)?.takeIf { it.isNotBlank() }
+                    ?: extractVersionFromApkFileName(file.name)
+                if (apkVer == null || compareVersions(apkVer, currentVersion) <= 0) {
+                    runCatching { file.delete() }
+                }
+            }
+        }
+
+        fun purgeUpdatesCacheDir(context: Context) {
+            val dir = File(context.cacheDir, "updates")
+            if (!dir.exists()) return
+            dir.listFiles()?.forEach { f ->
+                runCatching { f.deleteRecursively() }
+            }
+            runCatching { dir.delete() }
+        }
 
         internal fun normalizeVersionString(raw: String): String {
             var v = raw.trim()
@@ -269,6 +310,25 @@ class AppUpdateManager(private val context: Context) {
     private val _state = MutableStateFlow(UpdateUiState())
     val state: StateFlow<UpdateUiState> = _state.asStateFlow()
 
+    init {
+        cleanupInstalledOrStaleApksAsync()
+    }
+
+    fun cleanupInstalledOrStaleApksAsync() {
+        scope.launch(Dispatchers.IO) {
+            cleanupInstalledOrStaleApks()
+        }
+    }
+
+    fun cleanupInstalledOrStaleApks(currentVersion: String = BuildConfig.VERSION_NAME) {
+        val dir = File(context.cacheDir, "updates")
+        cleanupInstalledOrStaleApksInDir(dir, currentVersion) { apkFile ->
+            runCatching {
+                context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)?.versionName
+            }.getOrNull()
+        }
+    }
+
     fun canRequestPackageInstalls(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.packageManager.canRequestPackageInstalls()
@@ -325,10 +385,16 @@ class AppUpdateManager(private val context: Context) {
 
                     val isNewer = compareVersions(latest.versionName, BuildConfig.VERSION_NAME) > 0
                     if (!isNewer) {
+                        withContext(Dispatchers.IO) {
+                            purgeUpdatesCacheDir(context)
+                        }
                         _state.update {
                             it.copy(
                                 status = UpdateStatus.UP_TO_DATE,
                                 latestRelease = latest,
+                                downloadedFilePath = null,
+                                downloadedBytes = 0L,
+                                progress = 0f,
                                 showDialog = false
                             )
                         }

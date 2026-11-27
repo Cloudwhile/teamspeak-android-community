@@ -1,9 +1,11 @@
 package com.cloudwhile.tscc.data.update
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.nio.file.Files
 
 class AppUpdateManagerTest {
 
@@ -42,5 +44,27 @@ class AppUpdateManagerTest {
         val fallbackPick = AppUpdateManager.selectBestApkAsset(assets, listOf("riscv64"))
         assertNotNull(fallbackPick)
         assertEquals("universal", fallbackPick!!.matchedAbi)
+    }
+
+    @Test
+    fun `cleanupInstalledOrStaleApksInDir deletes installed older and part files while keeping newer apk`() {
+        val tempDir = Files.createTempDirectory("tscc_updates_test").toFile()
+        try {
+            val oldApk = tempDir.resolve("TSCC-v0.1.0-alpha.2-arm64-v8a.apk").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+            val installedApk = tempDir.resolve("TSCC-v0.1.0-alpha.3-arm64-v8a.apk").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+            val partFile = tempDir.resolve("TSCC-v0.1.0-alpha.4-arm64-v8a.apk.part").apply { writeBytes(byteArrayOf(1, 2)) }
+            val newerApk = tempDir.resolve("TSCC-v0.1.0-alpha.4-arm64-v8a.apk").apply { writeBytes(byteArrayOf(1, 2, 3, 4)) }
+
+            assertEquals("0.1.0-alpha.3", AppUpdateManager.extractVersionFromApkFileName(installedApk.name))
+
+            AppUpdateManager.cleanupInstalledOrStaleApksInDir(tempDir, currentVersion = "0.1.0-alpha.3")
+
+            assertFalse(oldApk.exists())
+            assertFalse(installedApk.exists())
+            assertFalse(partFile.exists())
+            assertTrue(newerApk.exists())
+        } finally {
+            tempDir.deleteRecursively()
+        }
     }
 }
