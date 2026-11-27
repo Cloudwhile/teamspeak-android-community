@@ -50,10 +50,10 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.HeadsetMic
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Stop
@@ -66,7 +66,6 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,11 +76,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -103,6 +100,7 @@ import com.cloudwhile.tscc.ui.components.AppScreenHeader
 import com.cloudwhile.tscc.ui.components.AppSegmentedPills
 import com.cloudwhile.tscc.ui.components.DashedHorizontalLine
 import com.cloudwhile.tscc.ui.components.pressableScale
+import com.cloudwhile.tscc.ui.i18n.localizeIdentityDisplayName
 import com.cloudwhile.tscc.ui.screens.identities.IdentitiesScreen
 import com.cloudwhile.tscc.ui.theme.AppTheme
 import kotlin.math.roundToInt
@@ -111,8 +109,9 @@ private enum class SettingsSubPage(val depth: Int) {
     ROOT(0),
     IDENTITIES(1),
     VOICE_DSP(1),
+    GENERAL_APPEARANCE(1),
     ABOUT(1),
-    OPEN_SOURCE(1)
+    OPEN_SOURCE(2)
 }
 
 private data class OpenSourceComponentItem(
@@ -215,10 +214,14 @@ fun SettingsScreen(
     onShowMessage: (String) -> Unit
 ) {
     var subPage by rememberSaveable { mutableStateOf(SettingsSubPage.ROOT) }
+    var showNicknameDialog by remember { mutableStateOf(false) }
     var showClearDataConfirm by remember { mutableStateOf(false) }
 
     BackHandler(enabled = subPage != SettingsSubPage.ROOT) {
-        subPage = SettingsSubPage.ROOT
+        subPage = when (subPage) {
+            SettingsSubPage.OPEN_SOURCE -> SettingsSubPage.ABOUT
+            else -> SettingsSubPage.ROOT
+        }
     }
 
     AnimatedContent(
@@ -246,16 +249,12 @@ fun SettingsScreen(
                     settings = settings,
                     identities = identities,
                     updateState = updateState,
-                    onUpdateNickname = onUpdateNickname,
-                    onUpdateLanguage = onUpdateLanguage,
                     onUpdateDarkTheme = onUpdateDarkTheme,
-                    onUpdateOverlayEnabled = onUpdateOverlayEnabled,
-                    onCheckForUpdates = onCheckForUpdates,
-                    onUpdateAutoCheckUpdates = onUpdateAutoCheckUpdates,
+                    onOpenEditNickname = { showNicknameDialog = true },
                     onOpenIdentities = { subPage = SettingsSubPage.IDENTITIES },
                     onOpenVoiceDsp = { subPage = SettingsSubPage.VOICE_DSP },
+                    onOpenGeneralAppearance = { subPage = SettingsSubPage.GENERAL_APPEARANCE },
                     onOpenAbout = { subPage = SettingsSubPage.ABOUT },
-                    onOpenOpenSource = { subPage = SettingsSubPage.OPEN_SOURCE },
                     onRequestClearAllData = { showClearDataConfirm = true }
                 )
             }
@@ -293,10 +292,22 @@ fun SettingsScreen(
                 )
             }
 
+            SettingsSubPage.GENERAL_APPEARANCE -> {
+                GeneralAppearanceSubScreen(
+                    settings = settings,
+                    onUpdateLanguage = onUpdateLanguage,
+                    onUpdateDarkTheme = onUpdateDarkTheme,
+                    onUpdateOverlayEnabled = onUpdateOverlayEnabled,
+                    onBack = { subPage = SettingsSubPage.ROOT }
+                )
+            }
+
             SettingsSubPage.ABOUT -> {
                 AboutAppSubScreen(
+                    settings = settings,
                     updateState = updateState,
                     onCheckForUpdates = onCheckForUpdates,
+                    onUpdateAutoCheckUpdates = onUpdateAutoCheckUpdates,
                     onOpenLicenses = { subPage = SettingsSubPage.OPEN_SOURCE },
                     onBack = { subPage = SettingsSubPage.ROOT }
                 )
@@ -304,9 +315,42 @@ fun SettingsScreen(
 
             SettingsSubPage.OPEN_SOURCE -> {
                 OpenSourceLicensesSubScreen(
-                    onBack = { subPage = SettingsSubPage.ROOT }
+                    onBack = { subPage = SettingsSubPage.ABOUT }
                 )
             }
+        }
+    }
+
+    if (showNicknameDialog) {
+        val strings = AppTheme.strings
+        var nicknameDraft by remember(settings.defaultNickname) { mutableStateOf(settings.defaultNickname) }
+        val saveNick = {
+            val clean = nicknameDraft.trim().ifBlank { "TSCC_Player" }
+            onUpdateNickname(clean)
+            showNicknameDialog = false
+            onShowMessage(
+                if (strings.isEnglish) "Default nickname updated to \"$clean\"" else "默认连接昵称已更新为「$clean」"
+            )
+        }
+        AppModalDialog(
+            title = strings.defaultNicknameLabel,
+            subtitle = if (strings.isEnglish) {
+                "Used by default when creating new server bookmarks or joining external invite links"
+            } else {
+                "新建服务器书签或通过外部邀请链接直连时默认使用的昵称"
+            },
+            onDismiss = { showNicknameDialog = false },
+            confirmText = strings.save,
+            onConfirm = saveNick
+        ) {
+            AppCapsuleField(
+                value = nicknameDraft,
+                onValueChange = { nicknameDraft = it },
+                placeholder = "TSCC_Player",
+                leadingIcon = Icons.Default.Person,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { saveNick() })
+            )
         }
     }
 
@@ -333,49 +377,40 @@ private fun SettingsHubRoot(
     settings: AppSettings,
     identities: List<IdentityEntity>,
     updateState: UpdateUiState,
-    onUpdateNickname: (String) -> Unit,
-    onUpdateLanguage: (AppLanguage) -> Unit,
     onUpdateDarkTheme: (Boolean) -> Unit,
-    onUpdateOverlayEnabled: (Boolean) -> Unit,
-    onCheckForUpdates: () -> Unit,
-    onUpdateAutoCheckUpdates: (Boolean) -> Unit,
+    onOpenEditNickname: () -> Unit,
     onOpenIdentities: () -> Unit,
     onOpenVoiceDsp: () -> Unit,
+    onOpenGeneralAppearance: () -> Unit,
     onOpenAbout: () -> Unit,
-    onOpenOpenSource: () -> Unit,
     onRequestClearAllData: () -> Unit
 ) {
     val colors = AppTheme.colors
     val strings = AppTheme.strings
-    val context = LocalContext.current
-    val focusManager = LocalFocusManager.current
-    var nicknameDraft by remember { mutableStateOf(settings.defaultNickname) }
-    var nicknameFocused by remember { mutableStateOf(false) }
-    val latestNicknameDraft by rememberUpdatedState(nicknameDraft)
-    val latestUpdateNickname by rememberUpdatedState(onUpdateNickname)
-
-    LaunchedEffect(settings.defaultNickname, nicknameFocused) {
-        if (!nicknameFocused && nicknameDraft != settings.defaultNickname) {
-            nicknameDraft = settings.defaultNickname
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            if (latestNicknameDraft != settings.defaultNickname) {
-                latestUpdateNickname(latestNicknameDraft)
-            }
-        }
-    }
-
-    val overlayPermLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) {
-        onUpdateOverlayEnabled(Settings.canDrawOverlays(context))
-    }
+    val isEn = strings.isEnglish
 
     val defaultIdentity = remember(identities) {
         identities.firstOrNull { it.isDefault } ?: identities.firstOrNull()
+    }
+
+    val hasNewVersion = updateState.status == UpdateStatus.AVAILABLE ||
+        updateState.status == UpdateStatus.READY_TO_INSTALL ||
+        updateState.status == UpdateStatus.DOWNLOADING
+    val aboutBadge = when {
+        updateState.status == UpdateStatus.CHECKING -> if (isEn) "Checking..." else "检查中..."
+        hasNewVersion -> strings.newVersionBadge(updateState.latestRelease?.versionName.orEmpty())
+        else -> "v${BuildConfig.VERSION_NAME}"
+    }
+
+    val langBadge = when (settings.appLanguage) {
+        AppLanguage.SYSTEM -> if (isEn) "Auto" else "跟随系统"
+        AppLanguage.ZH_CN -> "中文"
+        AppLanguage.EN -> "EN"
+    }
+    val themeBadge = if (settings.darkTheme) {
+        if (isEn) "Dark" else "深色"
+    } else {
+        if (isEn) "Light" else "浅色"
     }
 
     LazyColumn(
@@ -398,29 +433,21 @@ private fun SettingsHubRoot(
             }
         }
 
-        // Section 1: Profile & Identity Keys
+        // Group 1: Profile & Identity Keys (Entries 1 & 2)
         item {
             SettingsSectionCard(title = strings.sectionIdentityAndProfile) {
-                AppCapsuleField(
-                    value = nicknameDraft,
-                    onValueChange = { nicknameDraft = it },
-                    label = strings.defaultNicknameLabel,
-                    placeholder = "TSCC_Player",
-                    leadingIcon = Icons.Default.Person,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            onUpdateNickname(nicknameDraft)
-                            focusManager.clearFocus()
-                        }
-                    ),
-                    modifier = Modifier.onFocusChanged { state ->
-                        val wasFocused = nicknameFocused
-                        nicknameFocused = state.hasFocus
-                        if (wasFocused && !state.hasFocus) {
-                            onUpdateNickname(nicknameDraft)
-                        }
-                    }
+                SettingsNavEntryRow(
+                    icon = Icons.Default.Person,
+                    iconBg = colors.periwinkleSoft,
+                    iconTint = colors.periwinkle,
+                    title = strings.defaultNicknameLabel,
+                    subtitle = if (isEn) {
+                        "Default display name for new bookmarks & invite links"
+                    } else {
+                        "添加新服务器书签与打开邀请链接时的默认昵称"
+                    },
+                    badgeText = settings.defaultNickname,
+                    onClick = onOpenEditNickname
                 )
 
                 DashedHorizontalLine(color = colors.border, modifier = Modifier.fillMaxWidth())
@@ -431,7 +458,7 @@ private fun SettingsHubRoot(
                     iconTint = colors.periwinkle,
                     title = strings.identityManageTitle,
                     subtitle = strings.identityManageSub(
-                        defaultIdentity?.name ?: "Default",
+                        strings.localizeIdentityDisplayName(defaultIdentity?.name),
                         defaultIdentity?.securityLevel ?: 8,
                         identities.size.coerceAtLeast(1)
                     ),
@@ -441,24 +468,120 @@ private fun SettingsHubRoot(
             }
         }
 
-        // Section 2: Voice & Acoustic DSP
+        // Group 2: Voice DSP & General Appearance (Entries 3 & 4)
         item {
-            SettingsSectionCard(title = strings.sectionVoiceAndDsp) {
+            SettingsSectionCard(title = if (isEn) "Voice & Preferences" else "语音与通用偏好") {
                 SettingsNavEntryRow(
                     icon = Icons.Default.Tune,
                     iconBg = colors.emeraldSoft,
                     iconTint = colors.emerald,
                     title = strings.voiceLabTitle,
                     subtitle = strings.voiceLabSub,
-                    badgeText = settings.voiceMode.localizedLabel(strings.isEnglish).substringBefore(" "),
+                    badgeText = settings.voiceMode.localizedLabel(isEn).substringBefore(" "),
                     onClick = onOpenVoiceDsp
+                )
+
+                DashedHorizontalLine(color = colors.border, modifier = Modifier.fillMaxWidth())
+
+                SettingsNavEntryRow(
+                    icon = Icons.Default.Palette,
+                    iconBg = colors.marigoldSoft,
+                    iconTint = if (colors.isDark) colors.marigold else colors.inkOnPastel,
+                    title = strings.sectionGeneralAndAppearance,
+                    subtitle = if (isEn) {
+                        "Language, dark/light theme & background edge voice overlay"
+                    } else {
+                        "界面显示语言、深浅色主题与后台贴边语音悬浮窗"
+                    },
+                    badgeText = "$langBadge · $themeBadge",
+                    onClick = onOpenGeneralAppearance
                 )
             }
         }
 
-        // Section 3: Language & Appearance
+        // Group 3: About (with Updates + Licenses) & Data Reset (Entries 5 & 6)
         item {
-            SettingsSectionCard(title = strings.sectionGeneralAndAppearance) {
+            SettingsSectionCard(title = strings.sectionAboutAndData) {
+                SettingsNavEntryRow(
+                    icon = Icons.Default.Info,
+                    iconBg = if (hasNewVersion) colors.emeraldSoft else colors.periwinkleSoft,
+                    iconTint = if (hasNewVersion) colors.emerald else colors.periwinkle,
+                    title = strings.aboutAppTitle,
+                    subtitle = if (isEn) {
+                        "App updates, open-source licenses, repository & community notice"
+                    } else {
+                        "检查版本更新、开源组件声明、项目仓库与非官方声明"
+                    },
+                    badgeText = aboutBadge,
+                    badgeBg = if (hasNewVersion) colors.emeraldSoft else null,
+                    badgeTint = if (hasNewVersion) colors.emerald else null,
+                    onClick = onOpenAbout
+                )
+
+                DashedHorizontalLine(color = colors.border, modifier = Modifier.fillMaxWidth())
+
+                SettingsNavEntryRow(
+                    icon = Icons.Default.DeleteForever,
+                    iconBg = colors.coralSoft,
+                    iconTint = colors.coral,
+                    title = strings.clearAllDataTitle,
+                    titleColor = colors.coral,
+                    subtitle = strings.clearAllDataSub,
+                    onClick = onRequestClearAllData
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GeneralAppearanceSubScreen(
+    settings: AppSettings,
+    onUpdateLanguage: (AppLanguage) -> Unit,
+    onUpdateDarkTheme: (Boolean) -> Unit,
+    onUpdateOverlayEnabled: (Boolean) -> Unit,
+    onBack: () -> Unit
+) {
+    val colors = AppTheme.colors
+    val strings = AppTheme.strings
+    val isEn = strings.isEnglish
+    val context = LocalContext.current
+
+    val overlayPermLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        onUpdateOverlayEnabled(Settings.canDrawOverlays(context))
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.canvas),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 26.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            AppScreenHeader(
+                title = strings.sectionGeneralAndAppearance,
+                subtitle = if (isEn) {
+                    "Display language, color theme & floating call widget"
+                } else {
+                    "显示语言、色彩外观与后台悬浮胶囊"
+                },
+                leading = {
+                    AppCircleIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = strings.back,
+                        onClick = onBack
+                    )
+                }
+            )
+        }
+
+        item {
+            SettingsSectionCard(
+                title = if (isEn) "Language & Color Theme" else "界面语言与主题模式"
+            ) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         text = strings.interfaceLanguageLabel,
@@ -467,7 +590,7 @@ private fun SettingsHubRoot(
                     )
                     AppSegmentedPills(
                         options = listOf(
-                            AppLanguage.SYSTEM to (if (strings.isEnglish) "Auto" else "跟随系统"),
+                            AppLanguage.SYSTEM to (if (isEn) "Auto" else "跟随系统"),
                             AppLanguage.ZH_CN to "简体中文",
                             AppLanguage.EN to "English"
                         ),
@@ -476,13 +599,21 @@ private fun SettingsHubRoot(
                     )
                 }
 
+                DashedHorizontalLine(color = colors.border, modifier = Modifier.fillMaxWidth())
+
                 SettingToggleRow(
                     title = strings.darkThemeTitle,
                     subtitle = strings.darkThemeSub,
                     checked = settings.darkTheme,
                     onCheckedChange = onUpdateDarkTheme
                 )
+            }
+        }
 
+        item {
+            SettingsSectionCard(
+                title = if (isEn) "In-Game & Background Overlay" else "后台与游戏通话悬浮窗"
+            ) {
                 SettingToggleRow(
                     title = strings.floatingOverlayTitle,
                     subtitle = strings.floatingOverlaySub,
@@ -505,80 +636,6 @@ private fun SettingsHubRoot(
                             onUpdateOverlayEnabled(false)
                         }
                     }
-                )
-            }
-        }
-
-        // Section 4: Updates, About, Open Source Licenses & Clear All App Data
-        item {
-            val hasNewVersion = updateState.status == UpdateStatus.AVAILABLE ||
-                updateState.status == UpdateStatus.READY_TO_INSTALL ||
-                updateState.status == UpdateStatus.DOWNLOADING
-            val updateBadge = when {
-                updateState.status == UpdateStatus.CHECKING -> if (strings.isEnglish) "Checking..." else "检查中..."
-                hasNewVersion -> "NEW · v${updateState.latestRelease?.versionName.orEmpty()}"
-                else -> "v${BuildConfig.VERSION_NAME}"
-            }
-
-            SettingsSectionCard(title = strings.sectionAboutAndData) {
-                SettingsNavEntryRow(
-                    icon = Icons.Default.SystemUpdate,
-                    iconBg = if (hasNewVersion) colors.emeraldSoft else colors.periwinkleSoft,
-                    iconTint = if (hasNewVersion) colors.emerald else colors.periwinkle,
-                    title = if (strings.isEnglish) "Check for Updates" else "检查并下载更新",
-                    subtitle = if (strings.isEnglish) {
-                        "Auto-match device CPU architecture APK from GitHub Releases"
-                    } else {
-                        "自动匹配本机架构安装包并校验下载安装"
-                    },
-                    badgeText = updateBadge,
-                    onClick = onCheckForUpdates
-                )
-
-                SettingToggleRow(
-                    title = if (strings.isEnglish) "Auto-Check Updates on Startup" else "启动时自动检查更新",
-                    subtitle = if (strings.isEnglish) {
-                        "Prompt when a newer release or pre-release is published"
-                    } else {
-                        "打开应用时后台静默检测新版本并提醒下载安装"
-                    },
-                    checked = settings.autoCheckUpdates,
-                    onCheckedChange = onUpdateAutoCheckUpdates
-                )
-
-                DashedHorizontalLine(color = colors.border, modifier = Modifier.fillMaxWidth())
-
-                SettingsNavEntryRow(
-                    icon = Icons.Default.Info,
-                    iconBg = colors.periwinkleSoft,
-                    iconTint = colors.periwinkle,
-                    title = strings.aboutAppTitle,
-                    subtitle = strings.aboutAppSub,
-                    badgeText = "v${BuildConfig.VERSION_NAME}",
-                    onClick = onOpenAbout
-                )
-
-                DashedHorizontalLine(color = colors.border, modifier = Modifier.fillMaxWidth())
-
-                SettingsNavEntryRow(
-                    icon = Icons.Default.Code,
-                    iconBg = colors.marigoldSoft,
-                    iconTint = if (colors.isDark) colors.marigold else colors.inkOnPastel,
-                    title = strings.openSourceTitle,
-                    subtitle = strings.openSourceSub,
-                    onClick = onOpenOpenSource
-                )
-
-                DashedHorizontalLine(color = colors.border, modifier = Modifier.fillMaxWidth())
-
-                SettingsNavEntryRow(
-                    icon = Icons.Default.DeleteForever,
-                    iconBg = colors.coralSoft,
-                    iconTint = colors.coral,
-                    title = strings.clearAllDataTitle,
-                    titleColor = colors.coral,
-                    subtitle = strings.clearAllDataSub,
-                    onClick = onRequestClearAllData
                 )
             }
         }
@@ -624,11 +681,11 @@ private fun VoiceDspSubScreen(
         item {
             AppScreenHeader(
                 title = strings.voiceLabTitle,
-                subtitle = "48,000 Hz · 20 ms Opus VoIP Pipeline",
+                subtitle = strings.voiceLabHeaderSubtitle,
                 leading = {
                     AppCircleIconButton(
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = if (strings.isEnglish) "Back" else "返回",
+                        contentDescription = strings.back,
                         onClick = onBack
                     )
                 }
@@ -902,13 +959,16 @@ private fun VoiceDspSubScreen(
 
 @Composable
 private fun AboutAppSubScreen(
+    settings: AppSettings,
     updateState: UpdateUiState = UpdateUiState(),
     onCheckForUpdates: () -> Unit = {},
+    onUpdateAutoCheckUpdates: (Boolean) -> Unit = {},
     onOpenLicenses: () -> Unit,
     onBack: () -> Unit
 ) {
     val colors = AppTheme.colors
     val strings = AppTheme.strings
+    val isEn = strings.isEnglish
     val context = LocalContext.current
     val repoUrl = "https://github.com/Cloudwhile/teamspeak-android-community"
 
@@ -926,7 +986,7 @@ private fun AboutAppSubScreen(
                 leading = {
                     AppCircleIconButton(
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = if (strings.isEnglish) "Back" else "返回",
+                        contentDescription = strings.back,
                         onClick = onBack
                     )
                 }
@@ -976,7 +1036,7 @@ private fun AboutAppSubScreen(
                             .padding(horizontal = 12.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = if (strings.isEnglish) "Unofficial Community" else "非官方社区版",
+                            text = if (isEn) "Unofficial Community" else "非官方社区版",
                             style = MaterialTheme.typography.labelMedium,
                             color = if (colors.isDark) colors.marigold else colors.inkOnPastel,
                             fontWeight = FontWeight.Bold
@@ -1023,7 +1083,7 @@ private fun AboutAppSubScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (strings.isEnglish) "GitHub Repository" else "开源仓库",
+                        text = if (isEn) "GitHub Repository" else "开源仓库",
                         style = MaterialTheme.typography.bodyMedium,
                         color = colors.textSecondary
                     )
@@ -1050,61 +1110,75 @@ private fun AboutAppSubScreen(
             }
         }
 
+        // Consolidated Updates Card (Check for Updates + Auto-check on Startup)
         item {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(colors.card)
-                    .border(1.dp, colors.border, RoundedCornerShape(20.dp))
-                    .padding(16.dp)
+            SettingsSectionCard(
+                title = if (isEn) "Version & Updates" else "版本检查与自动更新"
             ) {
-                Text(
-                    text = if (strings.isEnglish) "Unofficial Project Disclaimer" else "非官方项目声明",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = colors.textPrimary,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = if (strings.isEnglish) {
-                        "TSCC (TeamSpeak Community Client) is an independent, unofficial open-source project maintained by the community. It is NOT affiliated with, authorized, endorsed, or sponsored by TeamSpeak Systems GmbH. TeamSpeak® is a registered trademark of its respective owner."
-                    } else {
-                        "TSCC 是由社区独立开发与维护的非官方开源安卓客户端，与 TeamSpeak Systems GmbH 无任何隶属、合作、授权或官方背书关系。TeamSpeak® 等相关名称与标识归其各自权利人所有。"
+                AppPrimaryPillButton(
+                    text = when (updateState.status) {
+                        UpdateStatus.CHECKING -> if (isEn) "Checking for Updates..." else "正在检查更新..."
+                        UpdateStatus.AVAILABLE, UpdateStatus.READY_TO_INSTALL -> if (isEn) {
+                            "Update to v${updateState.latestRelease?.versionName.orEmpty()}"
+                        } else {
+                            "发现新版本 v${updateState.latestRelease?.versionName.orEmpty()} · 点击更新"
+                        }
+                        else -> if (isEn) "Check for Updates" else "检查并下载更新"
                     },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textSecondary
+                    leadingIcon = Icons.Default.SystemUpdate,
+                    enabled = updateState.status != UpdateStatus.CHECKING,
+                    onClick = onCheckForUpdates,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                DashedHorizontalLine(color = colors.border, modifier = Modifier.fillMaxWidth())
+
+                SettingToggleRow(
+                    title = if (isEn) "Auto-Check Updates on Startup" else "启动时自动检查更新",
+                    subtitle = if (isEn) {
+                        "Prompt when a newer release or pre-release is published on GitHub"
+                    } else {
+                        "打开应用时后台静默检测新版本并提示匹配本机架构安装"
+                    },
+                    checked = settings.autoCheckUpdates,
+                    onCheckedChange = onUpdateAutoCheckUpdates
                 )
             }
         }
 
         item {
-            AppPrimaryPillButton(
-                text = when (updateState.status) {
-                    UpdateStatus.CHECKING -> if (strings.isEnglish) "Checking for Updates..." else "正在检查更新..."
-                    UpdateStatus.AVAILABLE, UpdateStatus.READY_TO_INSTALL -> if (strings.isEnglish) {
-                        "Update to v${updateState.latestRelease?.versionName.orEmpty()}"
-                    } else {
-                        "发现新版本 v${updateState.latestRelease?.versionName.orEmpty()} · 点击更新"
-                    }
-                    else -> if (strings.isEnglish) "Check for Updates" else "检查并下载更新"
-                },
-                leadingIcon = Icons.Default.SystemUpdate,
-                enabled = updateState.status != UpdateStatus.CHECKING,
-                onClick = onCheckForUpdates,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
+            SettingsSectionCard(
+                title = if (isEn) "Open Source & Legal" else "开源协议与声明"
+            ) {
+                SettingsNavEntryRow(
+                    icon = Icons.Default.Code,
+                    iconBg = colors.marigoldSoft,
+                    iconTint = if (colors.isDark) colors.marigold else colors.inkOnPastel,
+                    title = strings.openSourceTitle,
+                    subtitle = strings.openSourceSub,
+                    onClick = onOpenLicenses
+                )
 
-        item {
-            AppPrimaryPillButton(
-                text = strings.openSourceTitle,
-                leadingIcon = Icons.Default.Code,
-                containerColor = colors.cardElevated,
-                contentColor = colors.textPrimary,
-                onClick = onOpenLicenses,
-                modifier = Modifier.fillMaxWidth()
-            )
+                DashedHorizontalLine(color = colors.border, modifier = Modifier.fillMaxWidth())
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = if (isEn) "Unofficial Project Disclaimer" else "非官方项目声明",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = colors.textPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (isEn) {
+                            "TSCC (TeamSpeak Community Client) is an independent, unofficial open-source project maintained by the community. It is NOT affiliated with, authorized, endorsed, or sponsored by TeamSpeak Systems GmbH. TeamSpeak® is a registered trademark of its respective owner."
+                        } else {
+                            "TSCC 是由社区独立开发与维护的非官方开源安卓客户端，与 TeamSpeak Systems GmbH 无任何隶属、合作、授权或官方背书关系。TeamSpeak® 等相关名称与标识归其各自权利人所有。"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textSecondary
+                    )
+                }
+            }
         }
     }
 }
@@ -1198,6 +1272,8 @@ private fun SettingsNavEntryRow(
     subtitle: String,
     titleColor: Color? = null,
     badgeText: String? = null,
+    badgeBg: Color? = null,
+    badgeTint: Color? = null,
     onClick: () -> Unit
 ) {
     val colors = AppTheme.colors
@@ -1244,14 +1320,16 @@ private fun SettingsNavEntryRow(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .background(colors.cardElevated)
+                    .background(badgeBg ?: colors.cardElevated)
                     .padding(horizontal = 9.dp, vertical = 3.dp)
             ) {
                 Text(
                     text = badgeText,
-                    color = colors.periwinkle,
+                    color = badgeTint ?: colors.periwinkle,
                     fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
